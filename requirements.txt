@@ -1,0 +1,56 @@
+# Framework principal - Agno con Groq
+agno>=1.7.8
+langchain>=0.3.0
+langgraph>=0.2.0
+
+# Proveedores de modelos
+groq>=0.12.0
+openai>=1.0.0
+
+# Base de datos vectorial y embeddings
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+faiss-cpu>=1.8.0
+tiktoken>=0.8.0
+
+# Transformers y modelos
+transformers>=4.40.0
+torch>=2.3.0
+
+# Utilidades para archivos
+PyPDF2>=3.0.1
+python-docx>=1.1.0
+openpyxl>=3.1.2
+python-pptx>=0.6.23
+pandas>=2.1.0
+
+# Web framework
+streamlit>=1.40.0
+fastapi>=0.115.0
+uvicorn>=0.32.0
+
+# Utilidades generales
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.9
+requests>=2.32.0
+aiofiles>=24.1.0
+python-dotenv>=1.0.0
+jinja2>=3.1.0
+
+# Logging y monitoreo
+loguru>=0.7.2
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+
+# Modelos locales (opcional)
+ollama>=0.1.7
+
+# Para generar PDFs
+reportlab>=4.0.7
+matplotlib>=3.8.0
+
+# Compatibilidad NumPy: evitar 2.x hasta que todos los binarios soporten la ABI nueva
+numpy<2

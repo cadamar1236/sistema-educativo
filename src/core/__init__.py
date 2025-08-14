@@ -1,0 +1,3 @@
+"""
+Lógica central del sistema
+"""

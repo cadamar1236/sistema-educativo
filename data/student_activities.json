@@ -1,0 +1,225 @@
+{
+  "student_001": [
+    {
+      "type": "lesson",
+      "subject": "Matemáticas",
+      "duration_minutes": 30,
+      "points_earned": 25,
+      "timestamp": "2025-08-12T18:06:40.333456",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "lesson",
+      "subject": "Matemáticas",
+      "duration_minutes": 30,
+      "points_earned": 25,
+      "timestamp": "2025-08-12T18:13:15.406234",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "lesson",
+      "subject": "Matemáticas",
+      "duration_minutes": 30,
+      "points_earned": 25,
+      "timestamp": "2025-08-12T18:23:02.482397",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/analytics/analyze",
+      "method": "POST",
+      "duration_seconds": 4.014573335647583,
+      "response_status": 200,
+      "hour": 19,
+      "auto_tracked": true,
+      "timestamp": "2025-08-12T19:07:01.602993",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/analytics/analyze",
+      "method": "POST",
+      "duration_seconds": 2.98252272605896,
+      "response_status": 200,
+      "hour": 19,
+      "auto_tracked": true,
+      "timestamp": "2025-08-12T19:07:04.585515",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "tutor"
+      ],
+      "subject": "Tutoría General",
+      "message": "dime que es una derivada",
+      "duration_minutes": 1,
+      "points_earned": 30,
+      "hour": 19,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-12T19:09:52.210849",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 2.9589850902557373,
+      "response_status": 200,
+      "hour": 19,
+      "auto_tracked": true,
+      "timestamp": "2025-08-12T19:09:52.376794",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-12T19:09:52.832372",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "tutor"
+      ],
+      "subject": "Tutoría General",
+      "message": "dime que es una derivada",
+      "duration_minutes": 1,
+      "points_earned": 30,
+      "hour": 19,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-12T19:10:45.364102",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 1.9145469665527344,
+      "response_status": 200,
+      "hour": 19,
+      "auto_tracked": true,
+      "timestamp": "2025-08-12T19:10:45.403497",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-12T19:10:45.761115",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "curriculum_creator"
+      ],
+      "subject": "Planificación",
+      "message": "creame un plan de estudio para estudiar derivadas de segundo orden",
+      "duration_minutes": 1,
+      "points_earned": 22,
+      "hour": 19,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-12T19:12:18.840709",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 3.3986384868621826,
+      "response_status": 200,
+      "hour": 19,
+      "auto_tracked": true,
+      "timestamp": "2025-08-12T19:12:18.877104",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-12T19:12:19.226593",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "curriculum_creator"
+      ],
+      "subject": "Planificación",
+      "message": "creame un plan de estudios para estudiar derivadas",
+      "duration_minutes": 1,
+      "points_earned": 22,
+      "hour": 19,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-12T19:12:39.202352",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 3.0024302005767822,
+      "response_status": 200,
+      "hour": 19,
+      "auto_tracked": true,
+      "timestamp": "2025-08-12T19:12:39.219393",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-12T19:12:39.252293",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "curriculum_creator"
+      ],
+      "subject": "Planificación",
+      "message": "generam eun plan de estudio de derivadas",
+      "duration_minutes": 1,
+      "points_earned": 22,
+      "hour": 19,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-12T19:16:09.601789",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 3.315659999847412,
+      "response_status": 200,
+      "hour": 19,
+      "auto_tracked": true,
+      "timestamp": "2025-08-12T19:16:09.651234",
+      "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-12T19:16:10.105819",
+      "date": "2025-08-12"
+    }
+  ]
+}

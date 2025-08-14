@@ -1,0 +1,16 @@
+{
+  "student_001": {
+    "student_id": "student_001",
+    "name": "Estudiante Demo",
+    "grade": "10° Grado",
+    "current_level": "Intermedio Alto",
+    "overall_progress": 78,
+    "weekly_goal": 85,
+    "weekly_progress": 72,
+    "streak_days": 12,
+    "registration_date": "2025-05-15T18:12:51.561656",
+    "last_activity": "2025-08-13T18:12:51.561656",
+    "total_points": 2480,
+    "total_study_hours": 156.5
+  }
+}
