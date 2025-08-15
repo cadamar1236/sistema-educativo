@@ -1755,15 +1755,22 @@ async def upload_document_real(
         if not REAL_LIBRARY_AVAILABLE:
             raise HTTPException(status_code=503, detail="Servicio de biblioteca real no disponible")
         
-        # Validar tipo de archivo
-        allowed_types = ['.pdf', '.docx', '.txt']
+        # Validar tipo de archivo - soportar todos los tipos del servicio mejorado
+        allowed_types = [
+            '.txt', '.md', '.pdf', '.doc', '.docx',  # Documentos
+            '.ppt', '.pptx',  # Presentaciones
+            '.xls', '.xlsx', '.csv',  # Hojas de cálculo
+            '.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff',  # Imágenes
+            '.html', '.htm', '.xml', '.json', '.yaml', '.yml',  # Datos estructurados
+            '.py', '.js', '.java', '.cpp', '.c', '.h',  # Código
+            '.log', '.rtf', '.odt'  # Otros
+        ]
         file_extension = os.path.splitext(file.filename)[1].lower()
         
-        if file_extension not in allowed_types:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Tipo de archivo no soportado. Tipos permitidos: {', '.join(allowed_types)}"
-            )
+        # Si el archivo no tiene extensión, intentar procesarlo de todas formas
+        if file_extension and file_extension not in allowed_types:
+            # Solo advertir, no bloquear - dejar que el servicio interno maneje la validación
+            print(f"⚠️ Tipo de archivo {file_extension} puede no estar completamente soportado")
         
         # Leer contenido del archivo
         content = await file.read()
@@ -2317,21 +2324,27 @@ async def upload_document_enhanced(
         # Use enhanced library service
         contents = await file.read()
         result = await enhanced_library.upload_document(
-            file=file,
             file_content=contents,
-            ocr_enabled=ocr_enabled,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
+            filename=file.filename,
+            content_type=file.content_type,
+            metadata={
+                'ocr_enabled': ocr_enabled,
+                'chunk_size': chunk_size,
+                'chunk_overlap': chunk_overlap
+            }
         )
         
         return JSONResponse(content={
             "success": True,
-            "document_id": result["document_id"],
-            "title": result["title"],
+            "document_id": result.get("document_id", "unknown"),
+            "title": result.get("title", file.filename),
+            "filename": result.get("filename", file.filename),
             "chunks": result.get("chunks", 0),
-            "file_type": result.get("file_type"),
-            "ocr_performed": result.get("ocr_performed", False),
-            "metadata": result.get("metadata", {})
+            "file_type": result.get("file_type", file.content_type),
+            "ocr_performed": result.get("ocr_performed", ocr_enabled),
+            "metadata": result.get("metadata", {}),
+            "service_used": result.get("service_used", "enhanced_library"),
+            "processed_content": result.get("processed_content", "")[:200] if result.get("processed_content") else ""
         })
         
     except Exception as e:
@@ -2357,11 +2370,14 @@ async def upload_multiple_documents(
             try:
                 contents = await file.read()
                 result = await enhanced_library.upload_document(
-                    file=file,
                     file_content=contents,
-                    ocr_enabled=ocr_enabled,
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap
+                    filename=file.filename,
+                    content_type=file.content_type,
+                    metadata={
+                        'ocr_enabled': ocr_enabled,
+                        'chunk_size': chunk_size,
+                        'chunk_overlap': chunk_overlap
+                    }
                 )
                 results.append({
                     "filename": file.filename,
