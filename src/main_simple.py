@@ -48,6 +48,14 @@ try:
     real_library = RealLibraryService()
     REAL_LIBRARY_AVAILABLE = True
     print("✅ Servicio real de biblioteca importado correctamente")
+    
+    # Importar servicio mejorado de biblioteca
+    from enhanced_library_service import EnhancedLibraryService
+    enhanced_library = EnhancedLibraryService()
+    print("✅ Servicio mejorado de biblioteca con OCR importado")
+except ImportError as lib_e:
+    print(f"⚠️ Error importando servicio mejorado: {lib_e}")
+    enhanced_library = None
 except ImportError as e:
     print(f"⚠️ Error importando servicio real de biblioteca: {e}")
     print("🔄 Usando biblioteca simulada")
@@ -2270,6 +2278,210 @@ async def get_all_library_documents(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ===== ENHANCED LIBRARY ENDPOINTS =====
+
+@app.post("/api/library/upload/enhanced")
+async def upload_document_enhanced(
+    file: UploadFile = File(...),
+    ocr_enabled: bool = Form(False),
+    chunk_size: int = Form(1000),
+    chunk_overlap: int = Form(200)
+):
+    """Upload document with enhanced processing capabilities including OCR"""
+    try:
+        if not enhanced_library:
+            # Fallback to regular library service
+            if REAL_LIBRARY_AVAILABLE:
+                result = await real_library.upload_document(file)
+                return JSONResponse(content=result)
+            else:
+                raise HTTPException(status_code=503, detail="Enhanced library service not available")
+        
+        # Use enhanced library service
+        contents = await file.read()
+        result = await enhanced_library.upload_document(
+            file=file,
+            file_content=contents,
+            ocr_enabled=ocr_enabled,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+        
+        return JSONResponse(content={
+            "success": True,
+            "document_id": result["document_id"],
+            "title": result["title"],
+            "chunks": result.get("chunks", 0),
+            "file_type": result.get("file_type"),
+            "ocr_performed": result.get("ocr_performed", False),
+            "metadata": result.get("metadata", {})
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in enhanced upload: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/library/upload/multiple")
+async def upload_multiple_documents(
+    files: List[UploadFile] = File(...),
+    ocr_enabled: bool = Form(False),
+    chunk_size: int = Form(1000),
+    chunk_overlap: int = Form(200)
+):
+    """Upload multiple documents at once"""
+    try:
+        if not enhanced_library:
+            raise HTTPException(status_code=503, detail="Enhanced library service not available")
+        
+        results = []
+        errors = []
+        
+        for file in files:
+            try:
+                contents = await file.read()
+                result = await enhanced_library.upload_document(
+                    file=file,
+                    file_content=contents,
+                    ocr_enabled=ocr_enabled,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap
+                )
+                results.append({
+                    "filename": file.filename,
+                    "document_id": result["document_id"],
+                    "success": True
+                })
+            except Exception as file_error:
+                errors.append({
+                    "filename": file.filename,
+                    "error": str(file_error)
+                })
+        
+        return JSONResponse(content={
+            "success": len(errors) == 0,
+            "uploaded": results,
+            "errors": errors,
+            "total": len(files),
+            "successful": len(results)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in multiple upload: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/library/upload/url")
+async def upload_from_url(request_data: dict):
+    """Upload document from URL"""
+    try:
+        url = request_data.get("url")
+        ocr_enabled = request_data.get("ocr_enabled", False)
+        
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        
+        if not enhanced_library:
+            raise HTTPException(status_code=503, detail="Enhanced library service not available")
+        
+        result = await enhanced_library.upload_from_url(
+            url=url,
+            ocr_enabled=ocr_enabled
+        )
+        
+        return JSONResponse(content={
+            "success": True,
+            "document_id": result["document_id"],
+            "title": result["title"],
+            "source_url": url
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in URL upload: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/library/formats")
+async def get_supported_formats():
+    """Get list of supported file formats"""
+    if enhanced_library:
+        formats = enhanced_library.get_supported_formats()
+    else:
+        formats = ["pdf", "txt", "docx"]  # Default formats
+    
+    return JSONResponse(content={
+        "formats": formats,
+        "categories": {
+            "documents": ["pdf", "doc", "docx", "txt", "rtf", "odt"],
+            "spreadsheets": ["xls", "xlsx", "csv", "ods"],
+            "presentations": ["ppt", "pptx", "odp"],
+            "images": ["jpg", "jpeg", "png", "gif", "bmp", "svg", "tiff"],
+            "code": ["py", "js", "ts", "jsx", "tsx", "html", "css", "json", "xml"]
+        }
+    })
+
+@app.get("/api/library/documents")
+async def get_all_documents():
+    """Get all documents in library"""
+    try:
+        if enhanced_library:
+            documents = await enhanced_library.get_all_documents()
+        elif REAL_LIBRARY_AVAILABLE:
+            documents = real_library.documents
+        else:
+            documents = []
+        
+        return JSONResponse(content={
+            "success": True,
+            "documents": documents,
+            "total": len(documents)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error getting documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/library/document/{document_id}")
+async def delete_document(document_id: str):
+    """Delete a document from library"""
+    try:
+        if enhanced_library:
+            result = await enhanced_library.delete_document(document_id)
+        elif REAL_LIBRARY_AVAILABLE:
+            # Fallback to regular library
+            real_library.documents = [d for d in real_library.documents if d.get("id") != document_id]
+            result = {"success": True}
+        else:
+            raise HTTPException(status_code=503, detail="Library service not available")
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        print(f"❌ Error deleting document: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/library/document/{document_id}")
+async def get_document(document_id: str):
+    """Get specific document details"""
+    try:
+        if enhanced_library:
+            document = await enhanced_library.get_document(document_id)
+        elif REAL_LIBRARY_AVAILABLE:
+            document = next((d for d in real_library.documents if d.get("id") == document_id), None)
+        else:
+            document = None
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        return JSONResponse(content={
+            "success": True,
+            "document": document
+        })
+        
+    except Exception as e:
+        print(f"❌ Error getting document: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== END ENHANCED LIBRARY ENDPOINTS =====
 
 if __name__ == "__main__":
     # Crear directorios necesarios
