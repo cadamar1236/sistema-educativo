@@ -53,6 +53,18 @@ try:
     
     # El wrapper ya incluye el servicio mejorado internamente si está disponible
     enhanced_library = real_library  # Usar el mismo wrapper para compatibilidad
+    
+    # Importar agente RAG mejorado con fallback local
+    try:
+        from agents.educational_rag.agent_fixed import EducationalRAGAgentFixed
+        # Reemplazar el agente RAG con la versión mejorada
+        if AGENTS_AVAILABLE:
+            from agents import EducationalRAGAgent
+            # Usar la versión fixed en lugar de la original
+            EducationalRAGAgent = EducationalRAGAgentFixed
+            print("✅ Educational RAG Agent reemplazado con versión mejorada (fallback local)")
+    except ImportError as e:
+        print(f"⚠️ No se pudo cargar Educational RAG Agent mejorado: {e}")
 except ImportError as e:
     print(f"⚠️ Error importando servicio de biblioteca con wrapper: {e}")
     print("🔄 Intentando importar servicios individuales...")
@@ -92,6 +104,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Importar y registrar routers de autenticación y suscripción
+try:
+    from api_auth_endpoints import auth_router, subscription_router
+    app.include_router(auth_router)
+    app.include_router(subscription_router)
+    print("✅ Endpoints de autenticación con Google y suscripciones con Stripe registrados")
+except ImportError as e:
+    print(f"⚠️ No se pudieron cargar endpoints de auth/suscripción: {e}")
 
 # === FUNCIONES AUXILIARES PARA TRACKING ===
 

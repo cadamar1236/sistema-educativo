@@ -1,0 +1,22 @@
+# Dependencias para autenticación y pagos
+
+# Autenticación con Google OAuth
+httpx>=0.25.0
+PyJWT>=2.8.0
+
+# Pagos con Stripe
+stripe>=7.0.0
+
+# Azure Search (opcional, con fallback local)
+azure-search-documents>=11.4.0
+azure-core>=1.29.0
+
+# Utilidades
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Base de datos (opcional, para persistencia)
+sqlalchemy>=2.0.0
+asyncpg>=0.29.0  # Para PostgreSQL async
+aiosqlite>=0.19.0  # Para SQLite async (desarrollo)
