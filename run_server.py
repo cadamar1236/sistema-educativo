@@ -7,8 +7,9 @@ import sys
 import os
 import uvicorn
 
-# Add the webapp directory to Python path
+# Add the webapp and src directories to Python path
 sys.path.insert(0, '/home/user/webapp')
+sys.path.insert(0, '/home/user/webapp/src')
 
 if __name__ == "__main__":
     # Set environment variables

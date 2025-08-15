@@ -82,16 +82,6 @@ export const SubscriptionPlans: React.FC = () => {
     return billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
   };
 
-  const getSavings = (plan: Plan) => {
-    if (billingPeriod === 'yearly' && plan.price_monthly > 0) {
-      const monthlyTotal = plan.price_monthly * 12;
-      const savings = monthlyTotal - plan.price_yearly;
-      const percentage = Math.round((savings / monthlyTotal) * 100);
-      return percentage > 0 ? `Ahorra ${percentage}%` : null;
-    }
-    return null;
-  };
-
   if (loading) {
     return <div>Cargando planes...</div>;
   }
@@ -104,7 +94,7 @@ export const SubscriptionPlans: React.FC = () => {
           Desbloquea todo el potencial del sistema educativo con IA
         </p>
         
-        {/* Toggle de período de facturación */}
+        {/* Toggle billing period */}
         <div className="inline-flex items-center bg-gray-100 rounded-lg p-1">
           <button
             className={`px-4 py-2 rounded-md transition-colors ${
@@ -126,7 +116,7 @@ export const SubscriptionPlans: React.FC = () => {
           >
             Anual
             <Chip size="sm" color="success" className="ml-2">
-              Ahorra hasta 20%
+              Ahorra 20%
             </Chip>
           </button>
         </div>
@@ -164,12 +154,6 @@ export const SubscriptionPlans: React.FC = () => {
                   /{billingPeriod === 'yearly' ? 'año' : 'mes'}
                 </span>
               </div>
-              
-              {getSavings(plan) && (
-                <Chip color="success" size="sm" className="mt-2">
-                  {getSavings(plan)}
-                </Chip>
-              )}
             </CardHeader>
 
             <Divider />
@@ -196,13 +180,6 @@ export const SubscriptionPlans: React.FC = () => {
             </CardBody>
           </Card>
         ))}
-      </div>
-
-      {/* Características adicionales */}
-      <div className="mt-12 text-center">
-        <p className="text-gray-600">
-          ✓ Sin compromisos • ✓ Cancela en cualquier momento • ✓ Soporte incluido
-        </p>
       </div>
     </div>
   );

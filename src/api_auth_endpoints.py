@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse, JSONResponse
 from typing import Dict, Any, Optional
 import logging
+import os
 
 # Importar servicios
 from auth.google_auth import google_auth, get_current_user, require_subscription
