@@ -42,24 +42,40 @@ except ImportError as e:
     print("🔄 Usando modo simulado")
     AGENTS_AVAILABLE = False
 
-# Importar servicio real de biblioteca
+# Importar servicio de biblioteca con wrapper unificado
 try:
-    from real_library_service import RealLibraryService
-    real_library = RealLibraryService()
+    # Usar el wrapper que maneja las diferencias de interfaz
+    from library_service_wrapper import LibraryServiceWrapper
+    real_library = LibraryServiceWrapper()
     REAL_LIBRARY_AVAILABLE = True
-    print("✅ Servicio real de biblioteca importado correctamente")
+    print("✅ Servicio de biblioteca con wrapper unificado importado correctamente")
+    print("✅ El wrapper maneja automáticamente las diferencias de parámetros entre servicios")
     
-    # Importar servicio mejorado de biblioteca
-    from enhanced_library_service import EnhancedLibraryService
-    enhanced_library = EnhancedLibraryService()
-    print("✅ Servicio mejorado de biblioteca con OCR importado")
-except ImportError as lib_e:
-    print(f"⚠️ Error importando servicio mejorado: {lib_e}")
-    enhanced_library = None
+    # El wrapper ya incluye el servicio mejorado internamente si está disponible
+    enhanced_library = real_library  # Usar el mismo wrapper para compatibilidad
 except ImportError as e:
-    print(f"⚠️ Error importando servicio real de biblioteca: {e}")
-    print("🔄 Usando biblioteca simulada")
-    REAL_LIBRARY_AVAILABLE = False
+    print(f"⚠️ Error importando servicio de biblioteca con wrapper: {e}")
+    print("🔄 Intentando importar servicios individuales...")
+    
+    # Fallback a servicios individuales si el wrapper no está disponible
+    try:
+        from real_library_service import RealLibraryService
+        real_library = RealLibraryService()
+        REAL_LIBRARY_AVAILABLE = True
+        print("✅ Servicio real de biblioteca importado directamente")
+        
+        # Importar servicio mejorado de biblioteca
+        try:
+            from enhanced_library_service import EnhancedLibraryService
+            enhanced_library = EnhancedLibraryService()
+            print("✅ Servicio mejorado de biblioteca con OCR importado")
+        except ImportError as lib_e:
+            print(f"⚠️ Error importando servicio mejorado: {lib_e}")
+            enhanced_library = None
+    except ImportError as e2:
+        print(f"⚠️ Error importando servicio real de biblioteca: {e2}")
+        print("🔄 Usando biblioteca simulada")
+        REAL_LIBRARY_AVAILABLE = False
 
 # Crear aplicación FastAPI
 app = FastAPI(

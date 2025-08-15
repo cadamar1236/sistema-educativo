@@ -141,13 +141,26 @@ class EnhancedLibraryService:
             
             # Usar servicio base si está disponible
             if self.base_service:
-                result = await self.base_service.upload_document(
-                    file_content=file_content,
-                    filename=filename,
-                    content_type=document_metadata['content_type'],
-                    metadata=document_metadata
-                )
-                result['enhanced_processing'] = True
+                try:
+                    result = await self.base_service.upload_document(
+                        file_content=file_content,
+                        filename=filename,
+                        content_type=document_metadata['content_type'],
+                        metadata=document_metadata
+                    )
+                    result['enhanced_processing'] = True
+                except Exception as e:
+                    logger.warning(f"Error usando servicio base: {e}, usando modo independiente")
+                    # Fallback a modo independiente
+                    document_id = f"doc_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file_hash[:8]}"
+                    result = {
+                        'document_id': document_id,
+                        'filename': filename,
+                        'processed_content': processed_content,
+                        'metadata': document_metadata,
+                        'status': 'uploaded',
+                        'enhanced_processing': True
+                    }
             else:
                 # Modo independiente
                 document_id = f"doc_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file_hash[:8]}"

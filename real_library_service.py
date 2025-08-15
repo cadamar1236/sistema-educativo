@@ -84,12 +84,12 @@ class RealLibraryService:
             if hasattr(self.educational_rag_agent, 'upload_document'):
                 result = self.educational_rag_agent.upload_document(
                     user_id="system",  # User ID por defecto
-                    file_content=processed_content,
+                    content=processed_content,  # Cambiado de file_content a content
                     filename=filename,
                     category=metadata.get('category', 'general'),
                     subject=metadata.get('subject', 'general'),
-                    level=metadata.get('level', 'general'),
-                    document_type=metadata.get('document_type', 'document')
+                    level=metadata.get('level', 'general')
+                    # Removido document_type que no existe en la firma
                 )
             else:
                 # Usar método genérico si add_document no existe
