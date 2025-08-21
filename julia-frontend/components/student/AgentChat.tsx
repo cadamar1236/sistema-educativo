@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 import { 
   Card, 
   CardBody, 
@@ -89,7 +90,6 @@ interface Message {
 }
 
 interface AgentChatProps {
-  studentId?: string;
   onActivityUpdate?: (activity: {
     type?: 'lesson' | 'exercise' | 'quiz' | 'chat_session';
     subject?: string;
@@ -99,10 +99,9 @@ interface AgentChatProps {
   }) => void;
 }
 
-export default function AgentChat({ 
-  studentId = 'student_001', 
-  onActivityUpdate 
-}: AgentChatProps) {
+export default function AgentChat({ onActivityUpdate }: AgentChatProps) {
+  const { user } = useAuth() as any
+  const studentId = user?.id
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -119,7 +118,7 @@ export default function AgentChat({
   const [agentsStatus, setAgentsStatus] = useState<any[]>([])
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Scroll automático al final
   const scrollToBottom = () => {
@@ -503,11 +502,12 @@ export default function AgentChat({
                                 ),
                                 
                                 // Código inline y bloques
-                                code: ({inline, className, children, ...props}) => {
+                                code: (codeProps) => {
+                                  const { className, children, ...rest } = codeProps as any
                                   const match = /language-(\w+)/.exec(className || '');
                                   const lang = match ? match[1] : '';
-                                  
-                                  if (inline) {
+                                  const isInline = 'inline' in (codeProps as any) ? (codeProps as any).inline : false
+                                  if (isInline) {
                                     return (
                                       <code className="bg-gray-200 dark:bg-gray-700 text-red-600 dark:text-red-400 px-1 py-0.5 rounded text-xs font-mono">
                                         {children}
@@ -523,7 +523,7 @@ export default function AgentChat({
                                         </div>
                                       )}
                                       <pre className={`bg-gray-100 dark:bg-gray-800 p-2 overflow-x-auto font-mono text-xs ${lang ? 'rounded-b' : 'rounded'}`}>
-                                        <code {...props}>{children}</code>
+                                        <code {...rest}>{children}</code>
                                       </pre>
                                     </div>
                                   );
@@ -642,7 +642,8 @@ export default function AgentChat({
             <div className="p-4 border-t border-gray-200 dark:border-gray-700">
               <div className="flex gap-3">
                 <Textarea
-                  ref={inputRef}
+                  // @ts-ignore adapt generic ref
+                  ref={inputRef as any}
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyDown={handleKeyPress}

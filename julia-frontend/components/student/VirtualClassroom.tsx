@@ -29,6 +29,10 @@ interface ClassMessage {
 }
 
 export default function VirtualClassroom({ studentData }: VirtualClassroomProps) {
+  const studentName = studentData?.name
+  if (!studentName) {
+    return <div className="p-6 text-sm text-gray-500">Usuario no autenticado.</div>
+  }
   const [currentSession, setCurrentSession] = useState<ClassSession | null>(null)
   const [sessions, setSessions] = useState<ClassSession[]>([])
   const [messages, setMessages] = useState<ClassMessage[]>([])
@@ -43,7 +47,7 @@ export default function VirtualClassroom({ studentData }: VirtualClassroomProps)
 
   const loadClassroomData = async () => {
     try {
-      await logActivity(studentData?.name || 'student_demo', 'virtual_classroom_access')
+  await logActivity(studentName, 'virtual_classroom_access')
 
       // Simular sesiones de clase
       const mockSessions: ClassSession[] = [
@@ -127,7 +131,7 @@ export default function VirtualClassroom({ studentData }: VirtualClassroomProps)
     setMessages(prev => [...prev, message])
     setNewMessage('')
 
-    await logActivity(studentData?.name || 'student_demo', 'classroom_message', {
+  await logActivity(studentName, 'classroom_message', {
       session: currentSession?.id,
       message: newMessage
     })
@@ -136,7 +140,7 @@ export default function VirtualClassroom({ studentData }: VirtualClassroomProps)
   const toggleHandRaise = async () => {
     setIsHandRaised(!isHandRaised)
     
-    await logActivity(studentData?.name || 'student_demo', 'hand_raised', {
+  await logActivity(studentName, 'hand_raised', {
       session: currentSession?.id,
       raised: !isHandRaised
     })
@@ -155,7 +159,7 @@ export default function VirtualClassroom({ studentData }: VirtualClassroomProps)
   const joinSession = async (session: ClassSession) => {
     setCurrentSession(session)
     
-    await logActivity(studentData?.name || 'student_demo', 'join_session', {
+  await logActivity(studentName, 'join_session', {
       session: session.id,
       subject: session.subject
     })

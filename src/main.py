@@ -3,9 +3,20 @@ API principal del sistema educativo multiagente
 """
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
+import os
+import asyncio
+import random
+try:
+    import redis  # type: ignore
+except ImportError:  # Redis no instalado: desactivar cache silenciosamente
+    redis = None
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from typing import List, Optional, Dict, Any
 import json
 import sys
@@ -23,11 +34,20 @@ from src.core.agent_orchestrator_simple import AgentOrchestrator
 from src.services.student_stats_service import student_stats_service
 
 # Crear aplicación FastAPI
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute", "20/second"])  # Ajustar según carga
+
 app = FastAPI(
     title="Sistema Educativo Multiagente",
     description="Sistema integral de agentes inteligentes para instituciones educativas",
     version="1.0.0"
 )
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request, exc):
+    return JSONResponse(status_code=429, content={"detail": "Rate limit excedido", "error": str(exc)})
+
+app.state.limiter = limiter
+app.middleware("http")(limiter.middleware)
 
 # Configurar CORS
 app.add_middleware(
@@ -1132,6 +1152,28 @@ def _get_agent_description(agent_type: AgentType) -> str:
 
 # ===== ENDPOINTS DE ESTADÍSTICAS DEL ESTUDIANTE =====
 
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+_redis_client = None
+
+def get_redis():
+    """Obtener cliente Redis si la librería está instalada y no se ha deshabilitado.
+
+    Si la variable de entorno DISABLE_REDIS_CACHE=true o el paquete redis no está
+    disponible, devuelve None y el endpoint simplemente calculará los datos.
+    """
+    if os.getenv("DISABLE_REDIS_CACHE", "false").lower() == "true":
+        return None
+    if redis is None:  # Paquete no instalado
+        return None
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+            _redis_client.ping()
+        except Exception:
+            _redis_client = None
+    return _redis_client
+
 @app.get("/api/students/{student_id}/dashboard-stats")
 async def get_dashboard_stats(student_id: str = "student_001"):
     """
@@ -1144,11 +1186,64 @@ async def get_dashboard_stats(student_id: str = "student_001"):
         Diccionario con estadísticas completas del dashboard
     """
     try:
+        r = get_redis()
+        cache_key = f"dashboard_stats:{student_id}"
+        if r:
+            cached = r.get(cache_key)
+            if cached:
+                import json as _json
+                data = _json.loads(cached)
+                data["cache"] = True
+                return JSONResponse(content=data)
+
         stats = student_stats_service.get_dashboard_stats(student_id)
+        # Guardar en cache con TTL aleatorio 60-120s para evitar stampede
+        if r:
+            import json as _json
+            ttl = random.randint(60,120)
+            try:
+                r.set(cache_key, _json.dumps(stats), ex=ttl)
+            except Exception:
+                pass
+        stats["cache"] = False
         return JSONResponse(content=stats)
     except Exception as e:
         print(f"Error obteniendo estadísticas del dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+# ===== HEALTH / DIAGNOSTICS =====
+@app.get("/health/db")
+async def health_db():
+    """Verificar conexión a la base de datos y estado de migraciones básicas.
+
+    Devuelve:
+        status: up/down
+        driver: cadena del dialecto
+        url: sin credenciales (host/db)
+        users_table: true si la tabla users existe
+        time_ms: latencia de una consulta simple
+    """
+    from src.auth import users_db
+    engine = users_db.engine
+    start = datetime.now()
+    try:
+        with engine.connect() as conn:
+            # Detectar tabla users
+            users_exists = engine.dialect.has_table(conn, "users")
+            # Consulta mínima
+            conn.exec_driver_sql("SELECT 1")
+        elapsed = (datetime.now() - start).total_seconds() * 1000
+        url_obj = engine.url
+        safe_url = f"{url_obj.host}/{url_obj.database}" if url_obj.host else url_obj.database
+        return {
+            "status": "up",
+            "driver": engine.dialect.name,
+            "url": safe_url,
+            "users_table": users_exists,
+            "time_ms": round(elapsed, 2)
+        }
+    except Exception as e:
+        return {"status": "down", "error": str(e)}
 
 
 @app.post("/api/students/{student_id}/activity")

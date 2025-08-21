@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 import { 
   Card, 
   CardBody, 
@@ -87,7 +88,6 @@ interface Message {
 }
 
 interface MultiAgentChatProps {
-  studentId?: string;
   onActivityUpdate?: (activity: {
     type?: 'lesson' | 'exercise' | 'quiz' | 'chat_session';
     subject?: string;
@@ -97,10 +97,9 @@ interface MultiAgentChatProps {
   }) => void;
 }
 
-export default function MultiAgentChat({ 
-  studentId = 'student_001', 
-  onActivityUpdate 
-}: MultiAgentChatProps) {
+export default function MultiAgentChat({ onActivityUpdate }: MultiAgentChatProps) {
+  const { user } = useAuth() as any
+  const studentId = user?.id
   // Función para limpiar códigos ANSI de escape
   const cleanAnsiCodes = (text: string): string => {
     if (typeof text !== 'string') return text;
@@ -247,7 +246,7 @@ Todos los **agentes educativos** están conectados y preparados para colaborar e
           // Si el contenido no parece tener markdown, mejorarlo automáticamente
           if (content && !content.includes('#') && !content.includes('**') && !content.includes('*') && content.length > 50) {
             // Convertir texto plano en markdown básico
-            const lines = content.split('\n').filter(line => line.trim());
+            const lines = content.split('\n').filter((line: string) => line.trim());
             if (lines.length > 2) {
               content = `## 📚 ${response.agent_name}\n\n${content}`;
             }
@@ -563,11 +562,12 @@ Puedes preguntar sobre cualquier tema académico y **todos los especialistas** t
                               ),
                               
                               // Código inline y bloques
-                              code: ({inline, className, children, ...props}) => {
+                              code: (codeProps) => {
+                                const { className, children, ...rest } = codeProps as any
                                 const match = /language-(\w+)/.exec(className || '');
                                 const lang = match ? match[1] : '';
-                                
-                                if (inline) {
+                                const isInline = (codeProps as any).inline
+                                if (isInline) {
                                   return (
                                     <code className="bg-gray-200 dark:bg-gray-700 text-red-600 dark:text-red-400 px-1 py-0.5 rounded text-xs font-mono">
                                       {children}
@@ -583,7 +583,7 @@ Puedes preguntar sobre cualquier tema académico y **todos los especialistas** t
                                       </div>
                                     )}
                                     <pre className={`bg-gray-100 dark:bg-gray-800 p-2 overflow-x-auto font-mono text-xs ${lang ? 'rounded-b' : 'rounded'}`}>
-                                      <code {...props}>{children}</code>
+                                      <code {...rest}>{children}</code>
                                     </pre>
                                   </div>
                                 );

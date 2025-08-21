@@ -9,7 +9,8 @@ import logging
 import os
 
 # Importar servicios
-from auth.google_auth import google_auth, get_current_user, require_subscription
+from auth.google_auth import google_auth, get_current_user, require_subscription, require_teacher
+from auth.users_db import update_role
 from payments.stripe_subscription import stripe_service, SubscriptionTier
 
 logger = logging.getLogger(__name__)
@@ -47,15 +48,17 @@ async def google_callback(code: str = Query(...), state: Optional[str] = None):
             "message": "Autenticación exitosa"
         }
     except Exception as e:
-        logger.error(f"Error en callback de Google: {e}")
-        raise HTTPException(status_code=400, detail="Error en autenticación")
+        logger.error(f"Error en callback de Google: {type(e).__name__}: {e}")
+        # Retornar mensaje genérico pero log interno es detallado
+        raise HTTPException(status_code=400, detail="Error en autenticación con Google (callback)")
 
 @auth_router.get("/me")
 async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Obtener información del usuario actual"""
     return {
         "user": current_user,
-        "subscription_tier": current_user.get("subscription_tier", "free")
+        "subscription_tier": current_user.get("subscription_tier", "free"),
+        "role": current_user.get("role", "student")
     }
 
 @auth_router.post("/logout")
@@ -71,7 +74,7 @@ async def refresh_token(current_user: Dict[str, Any] = Depends(get_current_user)
     try:
         # Obtener tier actualizado
         subscription_tier = await stripe_service.get_user_subscription_tier(current_user["sub"])
-        
+
         # Crear nuevo token
         from auth.google_auth import GoogleUser
         user = GoogleUser(
@@ -81,16 +84,29 @@ async def refresh_token(current_user: Dict[str, Any] = Depends(get_current_user)
             picture=current_user.get("picture", ""),
             verified_email=True
         )
-        
-        new_token = google_auth.create_jwt_token(user, subscription_tier)
-        
-        return {
-            "access_token": new_token,
-            "token_type": "bearer"
-        }
+        new_token = google_auth.create_jwt_token(
+            user,
+            subscription_tier,
+            current_user.get("role", "student")
+        )
+        return {"access_token": new_token, "token_type": "bearer"}
     except Exception as e:
         logger.error(f"Error refrescando token: {e}")
         raise HTTPException(status_code=500, detail="Error refrescando token")
+
+@auth_router.post("/role/update")
+async def set_user_role(payload: Dict[str, str], current_user: Dict[str, Any] = Depends(require_teacher)):
+    """Actualizar rol de un usuario (simple: solo profesores pueden promover)."""
+    email = payload.get("email")
+    role = payload.get("role")
+    if not email or not role:
+        raise HTTPException(status_code=400, detail="email y role requeridos")
+    if role not in {"student", "teacher"}:
+        raise HTTPException(status_code=400, detail="rol inválido")
+    ok = update_role(email, role)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {"success": True, "email": email, "role": role}
 
 # ==================== ENDPOINTS DE SUSCRIPCIÓN ====================
 

@@ -128,8 +128,7 @@ class LibraryService {
         },
         body: JSON.stringify({
           query,
-          subject: subject || '',
-          student_id: 'student_001'
+          subject: subject || ''
         }),
       });
 
@@ -156,8 +155,7 @@ class LibraryService {
         },
         body: JSON.stringify({
           question,
-          subject: subject || '',
-          student_id: 'student_001'
+          subject: subject || ''
         }),
       });
 
@@ -193,8 +191,7 @@ class LibraryService {
           content,
           subject,
           type,
-          tags,
-          student_id: 'student_001'
+          tags
         }),
       });
 
@@ -214,7 +211,7 @@ class LibraryService {
    */
   async getLibraryStats(): Promise<LibraryStats> {
     try {
-      const response = await fetch(`${API_BASE}/api/library/stats?student_id=student_001`);
+  const response = await fetch(`${API_BASE}/api/library/stats`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

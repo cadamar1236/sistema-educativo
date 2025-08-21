@@ -13,6 +13,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import secrets
 import hashlib
+from .users_db import get_or_create_from_google
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/au
 JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_urlsafe(32))
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
+TEACHER_EMAILS = {
+    e.strip().lower() for e in os.getenv("TEACHER_EMAILS", "").split(",") if e.strip()
+}
 
 # URLs de Google OAuth
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -93,6 +97,18 @@ class GoogleAuthService:
             )
             
             if response.status_code != 200:
+                # Log detallado para depuración (NO incluye secrets)
+                safe_payload = {
+                    "status": response.status_code,
+                    "redirect_uri_used": self.redirect_uri,
+                    "has_client_id": bool(self.client_id),
+                    "error_body": None
+                }
+                try:
+                    safe_payload["error_body"] = response.json()
+                except Exception:
+                    safe_payload["error_body"] = response.text[:500]
+                logger.error(f"Google OAuth token exchange failed: {safe_payload}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Error obteniendo token de Google"
@@ -117,14 +133,15 @@ class GoogleAuthService:
             user_data = response.json()
             return GoogleUser(**user_data)
     
-    def create_jwt_token(self, user: GoogleUser, subscription_tier: str = "free") -> str:
-        """Crear JWT token para el usuario"""
+    def create_jwt_token(self, user: GoogleUser, subscription_tier: str = "free", role: str = "student") -> str:
+        """Crear JWT token para el usuario con rol"""
         payload = {
             "sub": user.id,
             "email": user.email,
             "name": user.name,
             "picture": user.picture,
             "subscription_tier": subscription_tier,
+            "role": role,
             "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
             "iat": datetime.utcnow()
         }
@@ -154,15 +171,22 @@ class GoogleAuthService:
         
         # 2. Obtener información del usuario
         google_user = await self.get_user_info(token_data["access_token"])
-        
-        # 3. Verificar si el usuario existe en nuestra BD (aquí podrías conectar con tu BD)
-        # Por ahora, solo creamos el token
+        # 3. Determinar rol (simple: lista blanca de correos de profesores)
+        role = "teacher" if google_user.email.lower() in TEACHER_EMAILS else "student"
         
         # 4. Obtener tier de suscripción (conectar con Stripe)
         subscription_tier = await self.get_user_subscription_tier(google_user.id)
         
-        # 5. Crear JWT token
-        jwt_token = self.create_jwt_token(google_user, subscription_tier)
+        # 5. Persistir / actualizar usuario en BD
+        db_user = get_or_create_from_google({
+            "id": google_user.id,
+            "email": google_user.email,
+            "name": google_user.name,
+            "picture": google_user.picture
+        }, role, subscription_tier)
+
+        # 6. Crear JWT token (fuente de verdad: BD)
+        jwt_token = self.create_jwt_token(google_user, db_user.subscription_tier, db_user.role)
         
         return AuthToken(
             access_token=jwt_token,
@@ -172,7 +196,8 @@ class GoogleAuthService:
                 "email": google_user.email,
                 "name": google_user.name,
                 "picture": google_user.picture,
-                "subscription_tier": subscription_tier
+                "subscription_tier": db_user.subscription_tier,
+                "role": db_user.role
             }
         )
     
@@ -219,6 +244,21 @@ async def require_subscription(
         )
     
     return current_user
+
+# ====== ROLES ======
+async def require_teacher(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Verificar que el usuario es profesor"""
+    if current_user.get("role") != "teacher":
+        raise HTTPException(status_code=403, detail="Acceso solo para profesores")
+    return current_user
+
+def role_required(*roles: str):
+    """Generar dependencia para uno o varios roles"""
+    async def _checker(current_user: Dict[str, Any] = Depends(get_current_user)):
+        if current_user.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Rol no autorizado")
+        return current_user
+    return _checker
 
 # Instancia global
 google_auth = GoogleAuthService()

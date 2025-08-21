@@ -35,6 +35,10 @@ interface StudyPlannerProps {
 }
 
 export default function StudyPlanner({ studentData }: StudyPlannerProps) {
+  const studentName = studentData?.name
+  if (!studentName) {
+    return <div className="p-6 text-sm text-gray-500">Usuario no autenticado.</div>
+  }
   const [tasks, setTasks] = useState<Task[]>([])
   const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([])
   const [isLoadingAI, setIsLoadingAI] = useState(false)
@@ -64,7 +68,7 @@ export default function StudyPlanner({ studentData }: StudyPlannerProps) {
 
   const loadStudyData = async () => {
     try {
-      await logActivity(studentData?.name || 'student_demo', 'study_planner_access')
+  await logActivity(studentName, 'study_planner_access')
 
       // Cargar tareas iniciales (simuladas)
       const initialTasks: Task[] = [
@@ -121,7 +125,7 @@ export default function StudyPlanner({ studentData }: StudyPlannerProps) {
 
     setIsLoadingAI(true)
     try {
-      await logActivity(studentData?.name || 'student_demo', 'ai_study_plan_request', {
+  await logActivity(studentName, 'ai_study_plan_request', {
         subject: newPlan.subject,
         goal: newPlan.goal,
         level: newPlan.currentLevel
@@ -222,7 +226,7 @@ export default function StudyPlanner({ studentData }: StudyPlannerProps) {
       setNewTask({ title: '', subject: '', priority: 'media', estimatedTime: 60, description: '' })
       setShowAddForm(false)
 
-      await logActivity(studentData?.name || 'student_demo', 'task_created', {
+  await logActivity(studentName, 'task_created', {
         title: task.title,
         subject: task.subject,
         priority: task.priority
@@ -235,7 +239,7 @@ export default function StudyPlanner({ studentData }: StudyPlannerProps) {
       task.id === taskId ? { ...task, status: newStatus } : task
     ))
 
-    await logActivity(studentData?.name || 'student_demo', 'task_status_updated', {
+  await logActivity(studentName, 'task_status_updated', {
       taskId,
       newStatus
     })
@@ -267,7 +271,7 @@ export default function StudyPlanner({ studentData }: StudyPlannerProps) {
     const taskToDelete = tasks.find(t => t.id === taskId)
     setTasks(tasks.filter(task => task.id !== taskId))
     
-    await logActivity(studentData?.name || 'student_demo', 'task_deleted', {
+  await logActivity(studentName, 'task_deleted', {
       taskId,
       title: taskToDelete?.title
     })

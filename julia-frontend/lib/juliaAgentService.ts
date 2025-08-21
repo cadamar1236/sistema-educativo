@@ -1,16 +1,20 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 
 // Configuración base para conectar con el backend de Julia
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
-// Cliente HTTP configurado
+// Cliente HTTP configurado (se le podrán inyectar headers dinámicos)
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' }
 });
+
+// Tipos básicos (placeholder – puedes afinar según backend)
+interface AnalyticsResponse { [key: string]: any; performance_score?: number }
+interface CoachingResponse { guidance?: string; [key: string]: any }
+interface RealTimeData { status?: string; [key: string]: any }
+interface RecommendationsResponse { recommendations: string[]; priority?: string; generated_by?: string }
 
 // Tipos para el sistema multiagente
 export interface StudentData {
@@ -34,192 +38,166 @@ export interface MultiAgentRequest {
 }
 
 class JuliaAgentService {
+  private authToken: string | null = null;
+
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+  }
+
+  // Helper centralizado con reintentos simples (exponencial suave)
+  private async request<T>(config: AxiosRequestConfig & { retries?: number; retryDelayMs?: number }): Promise<T> {
+    const { retries = 1, retryDelayMs = 500, ...axiosCfg } = config;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const finalCfg: AxiosRequestConfig = { ...axiosCfg };
+        finalCfg.headers = {
+          ...(axiosCfg.headers || {}),
+          ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {})
+        };
+        const resp = await apiClient.request<T>(finalCfg);
+        return resp.data;
+      } catch (err: any) {
+        const status = err?.response?.status;
+        const retriable = status >= 500 || !status; // network / server error
+        if (attempt < retries && retriable) {
+          await new Promise(r => setTimeout(r, retryDelayMs * (attempt + 1)));
+          continue;
+        }
+        // Normalizamos el error
+        const message = err?.response?.data?.detail || err?.message || 'Error desconocido';
+        throw new Error(message);
+      }
+    }
+    throw new Error('Error de petición no especificado');
+  }
   
   // Conectar con el agente de análisis educativo
-  async getStudentAnalytics(studentId: string, performanceData: any): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/analytics/analyze', {
-        student_id: studentId,
-        performance_data: performanceData
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting student analytics:', error);
-      throw new Error('No se pudo obtener el análisis del estudiante');
-    }
+  async getStudentAnalytics(studentId: string, performanceData: any): Promise<AnalyticsResponse> {
+    return this.request<AnalyticsResponse>({
+      method: 'POST',
+      url: '/agents/analytics/analyze',
+      data: { student_id: studentId, performance_data: performanceData },
+      retries: 1
+    });
   }
 
   // Conectar con el agente coach estudiantil
-  async getStudentCoaching(studentId: string, context: any): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/student-coach/get-guidance', {
-        student_id: studentId,
-        context: context,
-        request_type: 'personalized_guidance'
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting student coaching:', error);
-      throw new Error('No se pudo obtener la orientación del coach');
-    }
+  async getStudentCoaching(studentId: string, context: any): Promise<CoachingResponse> {
+    return this.request<CoachingResponse>({
+      method: 'POST',
+      url: '/agents/student-coach/get-guidance',
+      data: { student_id: studentId, context, request_type: 'personalized_guidance' },
+      retries: 1
+    });
   }
 
   // Conectar con el agente planificador de lecciones
   async getStudyPlanning(studentId: string, subjects: string[], goals: any): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/lesson-planner/create-plan', {
-        student_id: studentId,
-        subjects: subjects,
-        learning_goals: goals,
-        duration: '1_month'
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting study planning:', error);
-      throw new Error('No se pudo generar el plan de estudio');
-    }
+    return this.request({
+      method: 'POST',
+      url: '/agents/lesson-planner/create-plan',
+      data: { student_id: studentId, subjects, learning_goals: goals, duration: '1_month' }
+    });
   }
 
   // Conectar con el agente de análisis de documentos
   async analyzeStudentProgress(studentId: string, documents: any[]): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/document-analyzer/analyze-progress', {
-        student_id: studentId,
-        documents: documents,
-        analysis_type: 'progress_tracking'
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error analyzing student progress:', error);
-      throw new Error('No se pudo analizar el progreso');
-    }
+    return this.request({
+      method: 'POST',
+      url: '/agents/document-analyzer/analyze-progress',
+      data: { student_id: studentId, documents, analysis_type: 'progress_tracking' }
+    });
   }
 
   // Conectar con el generador de exámenes
   async generatePracticeExam(studentId: string, subject: string, difficulty: string): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/exam-generator/create-exam', {
-        student_id: studentId,
-        subject: subject,
-        difficulty: difficulty,
-        question_count: 10,
-        exam_type: 'practice'
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error generating practice exam:', error);
-      throw new Error('No se pudo generar el examen de práctica');
-    }
+    return this.request({
+      method: 'POST',
+      url: '/agents/exam-generator/create-exam',
+      data: { student_id: studentId, subject, difficulty, question_count: 10, exam_type: 'practice' }
+    });
   }
 
   // Obtener reporte parental real
   async getParentReport(studentId: string): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/analytics/parent-report', {
-        student_id: studentId
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting parent report:', error);
-      throw new Error('No se pudo generar el reporte parental');
-    }
+    return this.request({
+      method: 'POST',
+      url: '/agents/analytics/parent-report',
+      data: { student_id: studentId }
+    });
   }
 
   // Obtener métricas de clase real
   async getClassroomAnalytics(classId: string, studentsData: any[]): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/analytics/classroom-analytics', {
-        class_id: classId,
-        students_data: studentsData
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting classroom analytics:', error);
-      throw new Error('No se pudieron obtener las métricas de clase');
-    }
+    return this.request({
+      method: 'POST',
+      url: '/agents/analytics/classroom-analytics',
+      data: { class_id: classId, students_data: studentsData }
+    });
   }
 
   // Coordinador de agentes para solicitudes complejas
   async coordinateAgents(request: MultiAgentRequest): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/coordinator/execute', request);
-      return response.data;
-    } catch (error) {
-      console.error('Error coordinating agents:', error);
-      throw new Error('Error en la coordinación de agentes');
-    }
+    return this.request({
+      method: 'POST',
+      url: '/agents/coordinator/execute',
+      data: request
+    });
   }
 
   // Obtener estado del estudiante en tiempo real
-  async getStudentRealTimeData(studentId: string): Promise<any> {
+  async getStudentRealTimeData(studentId: string): Promise<RealTimeData | null> {
     try {
-      const response = await apiClient.get(`/students/${studentId}/realtime`);
-      return response.data;
+      return await this.request<RealTimeData>({ method: 'GET', url: `/students/${studentId}/realtime` });
     } catch (error) {
       console.error('Error getting real-time data:', error);
-      // Datos de fallback mientras se establece conexión
-      return {
-        name: "Estudiante Demo",
-        grade: "10° Grado",
-        status: "Conectando con sistema...",
-        last_activity: new Date().toISOString(),
-        performance: 0.0,
-        engagement: 0.0
-      };
+      return null; // UI decidirá qué mostrar
     }
   }
 
   // Enviar interacción del estudiante al sistema
   async logStudentInteraction(studentId: string, interaction: any): Promise<void> {
     try {
-      await apiClient.post('/students/interactions', {
-        student_id: studentId,
-        interaction: interaction,
-        timestamp: new Date().toISOString()
+      await this.request({
+        method: 'POST',
+        url: '/students/interactions',
+        data: { student_id: studentId, interaction, timestamp: new Date().toISOString() }
       });
     } catch (error) {
       console.error('Error logging interaction:', error);
-      // No bloqueamos la UI por errores de logging
     }
   }
 
   // Obtener recomendaciones personalizadas en tiempo real
-  async getPersonalizedRecommendations(studentId: string, currentContext: any): Promise<any> {
+  async getPersonalizedRecommendations(studentId: string, currentContext: any): Promise<RecommendationsResponse> {
     try {
-      const response = await apiClient.post('/agents/recommendations/generate', {
-        student_id: studentId,
-        context: currentContext,
-        timestamp: new Date().toISOString()
+      return await this.request<RecommendationsResponse>({
+        method: 'POST',
+        url: '/agents/recommendations/generate',
+        data: { student_id: studentId, context: currentContext, timestamp: new Date().toISOString() },
+        retries: 1
       });
-      return response.data;
     } catch (error) {
       console.error('Error getting recommendations:', error);
       return {
         recommendations: [
-          "Continúa con tu progreso actual",
-          "Revisa los conceptos de la última lección",
-          "Practica ejercicios de repaso"
+          'Continúa con tu progreso actual',
+          'Revisa los conceptos de la última lección',
+          'Practica ejercicios de repaso'
         ],
-        priority: "normal",
-        generated_by: "Sistema de respaldo"
+        priority: 'normal',
+        generated_by: 'Sistema de respaldo'
       };
     }
   }
 
   // Iniciar sesión de tutoría con IA
   async startTutoringSession(studentId: string, subject: string, questions: string[]): Promise<any> {
-    try {
-      const response = await apiClient.post('/agents/tutor/start-session', {
-        student_id: studentId,
-        subject: subject,
-        questions: questions,
-        session_type: 'interactive'
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error starting tutoring session:', error);
-      throw new Error('No se pudo iniciar la sesión de tutoría');
-    }
+    return this.request({
+      method: 'POST',
+      url: '/agents/tutor/start-session',
+      data: { student_id: studentId, subject, questions, session_type: 'interactive' }
+    });
   }
 }
 
@@ -238,7 +216,6 @@ export const useJuliaAgents = () => {
         juliaAgentService.getStudentCoaching(studentId, { type: 'dashboard_overview' }),
         juliaAgentService.getStudentRealTimeData(studentId)
       ]);
-
       return {
         analytics: analytics.status === 'fulfilled' ? analytics.value : null,
         coaching: coaching.status === 'fulfilled' ? coaching.value : null,

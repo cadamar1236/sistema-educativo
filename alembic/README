@@ -1,0 +1,6 @@
+Alembic migrations folder.
+Use: 
+  set DATABASE_URL=postgresql+psycopg://user:pass@host/db  (Windows PowerShell)
+  alembic revision --autogenerate -m "message"
+  alembic upgrade head
+Initial revision created manually for users table.

@@ -168,6 +168,46 @@ class StudentCoachAgent:
     def get_response(self, message: str) -> str:
         """Obtiene respuesta usando el sistema mejorado de captura"""
         return capture_agent_response(self.agent, message)
+
+    def _strip_prompt_context(self, raw: str) -> str:
+        """Elimina el bloque de contexto/instrucciones si el modelo lo devolvió junto a la respuesta.
+
+        Busca el marcador final 'Responde de manera completa y útil:' y devuelve el texto posterior.
+        También elimina caracteres de caja residuales y líneas vacías iniciales.
+        """
+        if not isinstance(raw, str):
+            return raw
+        cleaned = raw
+        marker = "Responde de manera completa y útil:"
+        if marker in cleaned:
+            # Tomar solo lo que viene después del marcador
+            cleaned = cleaned.split(marker, 1)[1]
+        # Si todavía contiene 'CONTEXTO DEL COACHING', intentar remover todo hasta últimas instrucciones
+        if 'CONTEXTO DEL COACHING' in cleaned and marker not in raw:
+            # Heurística: eliminar cualquier línea que empiece con guiones o palabras clave conocidas hasta encontrar una línea vacía doble
+            lines = cleaned.splitlines()
+            filtered = []
+            skip = True
+            for line in lines:
+                striped = line.strip()
+                if skip and striped.startswith('INSTRUCCIONES DE RESPUESTA'):
+                    # seguir saltando hasta que pase unas pocas líneas más
+                    continue
+                if skip and ('Responde de manera completa' in striped):
+                    skip = False
+                    continue
+                if not skip:
+                    filtered.append(line)
+            if filtered:
+                cleaned = '\n'.join(filtered)
+        # Eliminar caracteres de caja y códigos ANSI residuales
+        for ch in ['┏', '┗', '┃', '━', '┛']:
+            cleaned = cleaned.replace(ch, '')
+        import re as _re
+        cleaned = _re.sub(r'\x1b\[[0-9;]*m', '', cleaned)
+        # Quitar espacios múltiples iniciales
+        cleaned = '\n'.join([l.rstrip() for l in cleaned.splitlines()]).strip()
+        return cleaned
     
     async def coach_student(self, message: str, student_context: Optional[Dict] = None) -> str:
         """
@@ -191,8 +231,21 @@ class StudentCoachAgent:
             # Construir prompt de coaching personalizado
             coaching_prompt = self._build_coaching_prompt(message, emotional_analysis)
             
-            # Obtener respuesta del coach
+            # Obtener respuesta del coach (puede venir con el prompt impreso)
             response = self.get_response(coaching_prompt)
+            response = self._strip_prompt_context(response)
+
+            # Limpieza de caracteres de marco / colores ANSI si aparecen
+            if isinstance(response, str):
+                # Eliminar bordes y caracteres de caja comunes
+                for ch in ['┏', '┗', '┃', '━', '┛']:
+                    response = response.replace(ch, '')
+                # Eliminar códigos ANSI de color
+                import re as _re
+                ansi_pattern = _re.compile(r'\x1b\[[0-9;]*m')
+                response = _re.sub(ansi_pattern, '', response)
+                # Colapsar espacios múltiples generados
+                response = '\n'.join(line.rstrip() for line in response.splitlines())
             
             # Registrar la sesión
             session_record = {
@@ -207,7 +260,7 @@ class StudentCoachAgent:
             # Determinar si necesita intervención
             await self._assess_intervention_needs(emotional_analysis, message)
             
-            return response
+            return response.strip()
             
         except Exception as e:
             return f"Lo siento, experimento dificultades técnicas. Como tu coach, te sugiero que reformulemos tu pregunta. ¿En qué específicamente puedo ayudarte hoy? Error: {str(e)}"

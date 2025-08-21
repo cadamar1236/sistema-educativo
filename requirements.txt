@@ -29,6 +29,15 @@ streamlit>=1.40.0
 fastapi>=0.115.0
 uvicorn>=0.32.0
 
+# Base de datos y migraciones (escala)
+SQLAlchemy>=2.0.0
+psycopg[binary]>=3.1.0
+alembic>=1.13.0
+
+# Cache / Rate limiting
+redis>=5.0.0
+slowapi>=0.1.9
+
 # Utilidades generales
 pydantic>=2.0.0
 pydantic-settings>=2.0.0

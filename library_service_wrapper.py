@@ -39,11 +39,13 @@ class LibraryServiceWrapper:
         
         # Intentar cargar el servicio mejorado
         try:
-            from enhanced_library_service import enhanced_library_service
-            self.enhanced_service = enhanced_library_service
+            # Importar la clase en lugar de la instancia
+            from enhanced_library_service import EnhancedLibraryService
+            self.enhanced_service = EnhancedLibraryService()
             logger.info("✅ Servicio mejorado inicializado")
         except Exception as e:
             logger.warning(f"⚠️ No se pudo inicializar servicio mejorado: {e}")
+            self.enhanced_service = None
     
     async def upload_document(
         self, 
@@ -259,130 +261,6 @@ class LibraryServiceWrapper:
                 logger.error(f"Error buscando con RAG: {e}")
         
         return results
-    
-    async def get_library_stats(self) -> Dict[str, Any]:
-        """Obtener estadísticas de la biblioteca"""
-        try:
-            # Obtener todos los documentos
-            documents = await self.get_all_documents()
-            
-            # Calcular estadísticas
-            total_documents = len(documents)
-            documents_by_type = {}
-            documents_by_subject = {}
-            total_size = 0
-            recent_uploads = []
-            
-            for doc in documents:
-                # Contar por tipo
-                file_ext = os.path.splitext(doc.get('filename', ''))[1].upper().replace('.', '')
-                if file_ext:
-                    documents_by_type[file_ext] = documents_by_type.get(file_ext, 0) + 1
-                
-                # Contar por materia
-                subject = doc.get('subject', 'General')
-                documents_by_subject[subject] = documents_by_subject.get(subject, 0) + 1
-                
-                # Sumar tamaño
-                total_size += doc.get('size', 0)
-                
-                # Agregar a uploads recientes
-                if 'upload_date' in doc:
-                    recent_uploads.append({
-                        'filename': doc.get('filename', 'Unknown'),
-                        'subject': doc.get('subject', 'General'),
-                        'upload_date': doc.get('upload_date'),
-                        'size': doc.get('size', 0)
-                    })
-            
-            # Ordenar uploads recientes por fecha
-            recent_uploads.sort(key=lambda x: x.get('upload_date', ''), reverse=True)
-            recent_uploads = recent_uploads[:10]  # Solo los 10 más recientes
-            
-            return {
-                'total_documents': total_documents,
-                'documents_by_type': documents_by_type,
-                'documents_by_subject': documents_by_subject,
-                'total_storage': f"{total_size / (1024 * 1024):.2f} MB",
-                'recent_uploads': recent_uploads,
-                'usage_stats': {
-                    'total_searches': 0,  # Por implementar
-                    'total_questions': 0,  # Por implementar
-                    'most_searched_subject': '',
-                    'avg_questions_per_day': 0
-                },
-                'popular_searches': [],
-                'popular_tags': []
-            }
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo estadísticas: {e}")
-            return {
-                'total_documents': 0,
-                'documents_by_type': {},
-                'documents_by_subject': {},
-                'total_storage': "0 MB",
-                'recent_uploads': [],
-                'usage_stats': {},
-                'popular_searches': [],
-                'popular_tags': [],
-                'error': str(e)
-            }
-
-    async def delete_document(self, document_id: str) -> Dict[str, Any]:
-        """Eliminar un documento"""
-        try:
-            # Intentar con servicio mejorado
-            if self.enhanced_service and hasattr(self.enhanced_service, 'delete_document'):
-                return await self.enhanced_service.delete_document(document_id)
-            
-            # Eliminar localmente
-            upload_dir = "uploads"
-            for file in os.listdir(upload_dir):
-                if document_id in file:
-                    file_path = os.path.join(upload_dir, file)
-                    os.remove(file_path)
-                    
-                    # Eliminar metadata
-                    meta_path = file_path.replace(os.path.splitext(file)[1], '_meta.json')
-                    if os.path.exists(meta_path):
-                        os.remove(meta_path)
-                    
-                    return {
-                        'success': True,
-                        'message': f'Documento {document_id} eliminado'
-                    }
-            
-            return {
-                'success': False,
-                'message': f'Documento {document_id} no encontrado'
-            }
-            
-        except Exception as e:
-            logger.error(f"Error eliminando documento: {e}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    async def get_document(self, document_id: str) -> Dict[str, Any]:
-        """Obtener un documento específico"""
-        try:
-            # Intentar con servicio mejorado
-            if self.enhanced_service and hasattr(self.enhanced_service, 'get_document'):
-                return await self.enhanced_service.get_document(document_id)
-            
-            # Buscar localmente
-            documents = await self.get_all_documents()
-            for doc in documents:
-                if doc.get('document_id') == document_id:
-                    return doc
-            
-            raise ValueError(f"Documento {document_id} no encontrado")
-            
-        except Exception as e:
-            logger.error(f"Error obteniendo documento: {e}")
-            raise
 
 # Instancia global
 library_service_wrapper = LibraryServiceWrapper()

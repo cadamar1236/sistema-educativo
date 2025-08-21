@@ -239,18 +239,37 @@ class RealLibraryService:
         """Obtener estadísticas reales del índice de Azure Search"""
         try:
             if not self.educational_rag_agent:
+                logger.warning("Educational RAG agent no disponible")
                 return self._get_empty_stats()
             
             # Obtener documentos del usuario usando el nuevo método
-            if hasattr(self.educational_rag_agent.doc_manager, 'list_user_documents'):
-                result = self.educational_rag_agent.doc_manager.list_user_documents("system", limit=100)
-                if result.get("success"):
-                    documents = result.get("documents", [])
-                    stats = self._calculate_stats_from_documents(documents)
-                    return stats
-            
-            # Fallback a estadísticas vacías
-            return self._get_empty_stats()
+            if hasattr(self.educational_rag_agent, 'doc_manager'):
+                doc_manager = self.educational_rag_agent.doc_manager
+                logger.info(f"Doc manager disponible: {doc_manager}")
+                
+                if hasattr(doc_manager, 'list_user_documents'):
+                    try:
+                        logger.info("Llamando a list_user_documents...")
+                        result = doc_manager.list_user_documents("system", limit=100)
+                        logger.info(f"Resultado obtenido: {result}")
+                        
+                        if result.get("success"):
+                            documents = result.get("documents", [])
+                            stats = self._calculate_stats_from_documents(documents)
+                            logger.info(f"Estadísticas obtenidas: {len(documents)} documentos")
+                            return stats
+                        else:
+                            logger.warning(f"Error obteniendo documentos: {result.get('error', 'Unknown error')}")
+                            return self._get_empty_stats()
+                    except Exception as inner_e:
+                        logger.error(f"Error en list_user_documents: {inner_e}")
+                        return self._get_empty_stats()
+                else:
+                    logger.warning("Método list_user_documents no disponible en doc_manager")
+                    return self._get_empty_stats()
+            else:
+                logger.warning("doc_manager no disponible en educational_rag_agent")
+                return self._get_empty_stats()
             
         except Exception as e:
             logger.error(f"Error obteniendo estadísticas: {e}")

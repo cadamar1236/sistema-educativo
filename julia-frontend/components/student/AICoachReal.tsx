@@ -19,6 +19,10 @@ interface Message {
 }
 
 export default function AICoach({ studentData }: AICoachProps) {
+  const studentName = studentData?.name
+  if (!studentName) {
+    return <div className="p-6 text-sm text-gray-500">Usuario no autenticado.</div>
+  }
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -44,11 +48,11 @@ export default function AICoach({ studentData }: AICoachProps) {
       setIsLoading(true)
       
       // Log de actividad
-      await logActivity(studentData?.name || 'student_demo', 'ai_coach_init')
+  await logActivity(studentName, 'ai_coach_init')
 
       // Inicializar sesión de coaching con el agente real
       const session = await agentService.getStudentCoaching(
-        studentData?.name || 'student_demo',
+  studentName,
         {
           type: 'coaching_session_init',
           student_context: {
@@ -64,7 +68,7 @@ export default function AICoach({ studentData }: AICoachProps) {
       // Mensaje de bienvenida del coach IA
       const welcomeMessage: Message = {
         id: Date.now().toString(),
-        content: session?.welcome_message || `¡Hola ${studentData?.name || 'estudiante'}! 👋 Soy tu Coach IA personalizado. Estoy aquí para ayudarte a alcanzar tus objetivos académicos. ¿En qué puedo ayudarte hoy?`,
+  content: session?.welcome_message || `¡Hola ${studentName}! 👋 Soy tu Coach IA personalizado. Estoy aquí para ayudarte a alcanzar tus objetivos académicos. ¿En qué puedo ayudarte hoy?`,
         sender: 'coach',
         timestamp: new Date(),
         type: 'text',
@@ -126,14 +130,14 @@ export default function AICoach({ studentData }: AICoachProps) {
 
     try {
       // Log de la interacción real
-      await logActivity(studentData?.name || 'student_demo', 'ai_coach_interaction', {
+  await logActivity(studentName, 'ai_coach_interaction', {
         question: inputMessage,
         timestamp: new Date().toISOString()
       })
 
       // Obtener respuesta del agente coach real
       const response = await agentService.getStudentCoaching(
-        studentData?.name || 'student_demo',
+  studentName,
         {
           type: 'interactive_coaching',
           message: inputMessage,

@@ -1,3 +1,23 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Bytecode / cache
+__pycache__/
+*.pyc
+
+# Local databases (keep committed ones explicitly if needed)
+data/*.db
+!data/users.db
+!data/subscriptions.db
+
+# Node
+node_modules/
+
+# Logs
+logs/
+*.log
 # Dependencias de Node.js
 node_modules/
 npm-debug.log*

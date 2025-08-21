@@ -2,7 +2,7 @@
 API principal del sistema educativo multiagente - versión simplificada
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -12,8 +12,13 @@ import sys
 import os
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
+import os, random
+try:
+    import redis  # type: ignore
+except ImportError:
+    redis = None
 
 # Agregar el directorio padre al path para imports absolutos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,6 +27,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.config import settings
 from src.models import AgentType
 from src.services.student_stats_service import student_stats_service
+from src.services.assignment_service import assignment_service
 
 # Importar agentes reales
 try:
@@ -53,18 +59,6 @@ try:
     
     # El wrapper ya incluye el servicio mejorado internamente si está disponible
     enhanced_library = real_library  # Usar el mismo wrapper para compatibilidad
-    
-    # Importar agente RAG mejorado con fallback local
-    try:
-        from agents.educational_rag.agent_fixed import EducationalRAGAgentFixed
-        # Reemplazar el agente RAG con la versión mejorada
-        if AGENTS_AVAILABLE:
-            from agents import EducationalRAGAgent
-            # Usar la versión fixed en lugar de la original
-            EducationalRAGAgent = EducationalRAGAgentFixed
-            print("✅ Educational RAG Agent reemplazado con versión mejorada (fallback local)")
-    except ImportError as e:
-        print(f"⚠️ No se pudo cargar Educational RAG Agent mejorado: {e}")
 except ImportError as e:
     print(f"⚠️ Error importando servicio de biblioteca con wrapper: {e}")
     print("🔄 Intentando importar servicios individuales...")
@@ -89,6 +83,14 @@ except ImportError as e:
         print("🔄 Usando biblioteca simulada")
         REAL_LIBRARY_AVAILABLE = False
 
+# Importar routers de autenticación y suscripciones
+try:
+    from api_auth_endpoints import auth_router, subscription_router
+    _AUTH_ROUTERS_AVAILABLE = True
+except ImportError as _auth_e:
+    print(f"⚠️ No se pudieron importar routers de auth/subscription: {_auth_e}")
+    _AUTH_ROUTERS_AVAILABLE = False
+
 # Crear aplicación FastAPI
 app = FastAPI(
     title="Sistema Educativo Multiagente",
@@ -105,14 +107,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Importar y registrar routers de autenticación y suscripción
-try:
-    from api_auth_endpoints import auth_router, subscription_router
+# Registrar routers de auth si están disponibles
+if _AUTH_ROUTERS_AVAILABLE:
     app.include_router(auth_router)
     app.include_router(subscription_router)
-    print("✅ Endpoints de autenticación con Google y suscripciones con Stripe registrados")
-except ImportError as e:
-    print(f"⚠️ No se pudieron cargar endpoints de auth/suscripción: {e}")
+    print("✅ Routers de autenticación y suscripciones registrados (/api/auth, /api/subscription)")
+else:
+    print("ℹ️ Routers de autenticación no disponibles; endpoints OAuth no expuestos")
 
 # === FUNCIONES AUXILIARES PARA TRACKING ===
 
@@ -948,42 +949,69 @@ async def unified_chat(request_data: dict):
 
 @app.post("/api/agents/student-coach/get-guidance")
 async def get_student_guidance(request_data: dict):
-    """Obtener guía del coach estudiantil usando agente real"""
+    """Obtener guía del coach estudiantil usando agente real.
+
+    Acepta múltiples formas de payload para compatibilidad:
+    - {"studentData": {...}, "question": "..."}
+    - {"student_id": "123", "context": {...}, "request_type": "personalized_guidance"}
+    - {"studentId": "123", ...}
+    """
     try:
-        student_data = request_data.get("studentData", {})
-        question = request_data.get("question", "¿Cómo puedo mejorar mi rendimiento académico?")
-        
-        # Usar el coach estudiantil real con método específico
+        # Normalizar datos del estudiante
+        student_data = request_data.get("studentData") or request_data.get("student_data") or {}
+        student_id = request_data.get("student_id") or request_data.get("studentId") or student_data.get("id")
+        if not student_data and student_id:
+            # Construir estructura mínima si solo llega el ID
+            student_data = {"id": student_id}
+
+        context = request_data.get("context") or {}
+
+        # Determinar la pregunta / tema de orientación
+        question = (
+            request_data.get("question")
+            or context.get("question")
+            or context.get("message")
+            or "¿Cómo puedo mejorar mi rendimiento académico?"
+        )
+
+        # Usar coach real si está registrado
         if "student_coach" in agent_manager.agents:
             coach = agent_manager.agents["student_coach"]
             result = await coach.coach_student(question, student_data)
-            # Extraer contenido limpio si es un RunResponse
             guidance = agent_manager._extract_clean_response(result)
+            agent_used = "student_coach"
         else:
-            # Fallback al tutor
-            context = {
-                "student_data": student_data,
-                "guidance_mode": True
-            }
-            guidance = await agent_manager.get_agent_response("tutor", question, context)
-        
+            fallback_context = {"student_data": student_data, "guidance_mode": True, **context}
+            guidance = await agent_manager.get_agent_response("tutor", question, fallback_context)
+            agent_used = "tutor"
+
+        # Asegurar un string limpio
+        guidance_str = str(guidance)
+
         return {
             "success": True,
-            "guidance": guidance,
-            "formatted_content": guidance,  # Para compatibilidad con frontend
-            "student_id": student_data.get("id", "unknown"),
-            "agent_used": "student_coach" if "student_coach" in agent_manager.agents else "tutor",
-            "is_real_agent": True,
+            "guidance": guidance_str,
+            "formatted_content": guidance_str,
+            "student_id": student_id or student_data.get("id", "unknown"),
+            "agent_used": agent_used,
+            "is_real_agent": agent_used == "student_coach",
             "response_metadata": {
-                "length": len(str(guidance)),
-                "has_markdown": "##" in str(guidance) or "**" in str(guidance),
+                "length": len(guidance_str),
+                "has_markdown": "##" in guidance_str or "**" in guidance_str,
                 "model_used": settings.groq_model
             },
             "timestamp": datetime.now().isoformat()
         }
-        
+
     except Exception as e:
+        # Log básico para diagnosticar sin romper respuesta
+        print(f"❌ Error en get_student_guidance: {e}\nPayload recibido: {request_data}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Alias sin prefijo /api para cuando NEXT_PUBLIC_API_URL no incluye /api
+@app.post("/agents/student-coach/get-guidance")
+async def get_student_guidance_alias(request_data: dict):
+    return await get_student_guidance(request_data)
 
 @app.post("/api/students/interactions")
 async def log_student_interaction(request_data: dict):
@@ -1306,6 +1334,22 @@ async def start_tutoring_session(request_data: dict):
 
 # === ENDPOINTS DE ESTADÍSTICAS DEL ESTUDIANTE ===
 
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+_redis_client = None
+def _get_redis():
+    if os.getenv("DISABLE_REDIS_CACHE", "false").lower() == "true":
+        return None
+    if redis is None:
+        return None
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+            _redis_client.ping()
+        except Exception:
+            _redis_client = None
+    return _redis_client
+
 @app.get("/api/students/{student_id}/dashboard-stats")
 async def get_dashboard_stats(student_id: str = "student_001"):
     """
@@ -1318,17 +1362,168 @@ async def get_dashboard_stats(student_id: str = "student_001"):
         Estadísticas completas del dashboard incluyendo progreso, actividades, logros, etc.
     """
     try:
+        r = _get_redis()
+        key = f"dashboard_stats:{student_id}"
+        if r:
+            cached = r.get(key)
+            if cached:
+                import json as _json
+                data = _json.loads(cached)
+                data["success"] = True
+                data["student_id"] = student_id
+                data["timestamp"] = datetime.now().isoformat()
+                data["cache"] = True
+                return JSONResponse(content=data)
+
         dashboard_stats = student_stats_service.get_dashboard_stats(student_id)
-        
-        # Agregar metadatos de la respuesta directamente a la estructura
         dashboard_stats["success"] = True
         dashboard_stats["student_id"] = student_id
         dashboard_stats["timestamp"] = datetime.now().isoformat()
-        
+        dashboard_stats["cache"] = False
+        if r:
+            import json as _json
+            try:
+                r.set(key, _json.dumps(dashboard_stats), ex=random.randint(60,120))
+            except Exception:
+                pass
         return JSONResponse(content=dashboard_stats)
     except Exception as e:
         print(f"Error obteniendo estadísticas del dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+# ===== HEALTH / DIAGNOSTICS =====
+@app.get("/health/db")
+async def health_db():
+    """Verificar conexión a la base de datos y existencia de tabla users.
+    Devuelve status, driver, url segura y latencia.
+    """
+    try:
+        from auth import users_db  # type: ignore
+    except ImportError:
+        try:
+            from src.auth import users_db  # fallback
+        except ImportError as e:  # pragma: no cover
+            return {"status": "down", "error": f"users_db import failed: {e}"}
+    engine = users_db.engine
+    start = datetime.now()
+    try:
+        from sqlalchemy import inspect
+        with engine.connect() as conn:
+            insp = inspect(conn)
+            users_exists = 'users' in insp.get_table_names()
+            conn.exec_driver_sql("SELECT 1")
+        elapsed = (datetime.now() - start).total_seconds() * 1000
+        url_obj = engine.url
+        safe_url = f"{url_obj.host}/{url_obj.database}" if url_obj.host else url_obj.database
+        return {
+            "status": "up",
+            "driver": engine.dialect.name,
+            "url": safe_url,
+            "users_table": users_exists,
+            "time_ms": round(elapsed, 2)
+        }
+    except Exception as e:  # pragma: no cover
+        return {"status": "down", "error": str(e)}
+
+
+@app.get("/api/students/{student_id}/progress")
+async def get_student_progress(student_id: str, period: str = "week"):
+    """Endpoint especializado para el apartado 'Mi Progreso'.
+
+    Combina estadísticas reales de actividades con derivaciones AI ligeras.
+    """
+    try:
+        base_stats = student_stats_service.get_student_stats(student_id)
+        subject_stats = student_stats_service._get_subject_stats(student_id)  # internal call
+        trends = student_stats_service._get_trends(student_id)
+        badges = student_stats_service._get_student_badges(student_id)
+        recent_achievements = student_stats_service._get_recent_achievements(student_id)
+
+        # Cargar actividades para cálculo de tendencias por materia
+        activities_file = student_stats_service.activities_file
+        recent_by_subject = {}
+        previous_by_subject = {}
+        try:
+            with open(activities_file, 'r', encoding='utf-8') as f:
+                all_acts = json.load(f)
+            acts = all_acts.get(student_id, [])
+            now = datetime.now()
+            week_ago = (now - timedelta(days=7)).strftime('%Y-%m-%d')
+            two_weeks_ago = (now - timedelta(days=14)).strftime('%Y-%m-%d')
+            for a in acts:
+                subj = a.get('subject', 'General')
+                date_str = a.get('date') or a.get('timestamp', '')[:10]
+                if not date_str:
+                    continue
+                if date_str >= week_ago:
+                    recent_by_subject[subj] = recent_by_subject.get(subj, 0) + 1
+                elif two_weeks_ago <= date_str < week_ago:
+                    previous_by_subject[subj] = previous_by_subject.get(subj, 0) + 1
+        except Exception as e:
+            print(f"No se pudieron cargar actividades para tendencias: {e}")
+
+        # Añadir trend heurístico por materia
+        for s in subject_stats:
+            subj = s.get('subject', 'General')
+            recent_c = recent_by_subject.get(subj, 0)
+            prev_c = previous_by_subject.get(subj, 0)
+            if recent_c > prev_c:
+                s['trend'] = 'up'
+            elif recent_c < prev_c:
+                s['trend'] = 'down'
+            else:
+                s['trend'] = 'stable'
+
+        # Construir sesiones simuladas coherentes a partir de tendencias + materias
+        study_sessions = []
+        today = datetime.now()
+        for i, subj in enumerate(subject_stats[:7]):
+            day = today - timedelta(days=i)
+            study_sessions.append({
+                "date": day.strftime("%Y-%m-%d"),
+                "subject": subj["subject"],
+                "duration": int((subj.get("time_spent_hours", 1) * 60) / max(len(subject_stats), 1)),
+                "performance": min(100, int(subj.get("progress", 50) + (i * 2)))
+            })
+        study_sessions = list(reversed(study_sessions))
+
+        # Calcular métricas agregadas para UI
+        overall_progress = base_stats.get("overall_progress", 0)
+        avg_grade = 0.0
+        if subject_stats:
+            avg_grade = round(sum(s.get("grade", 0) for s in subject_stats) / len(subject_stats), 1)
+
+        total_time = round(sum(s.get("time_spent_hours", 0) for s in subject_stats), 1)
+        exercises = sum(s.get("exercises_completed", 0) for s in subject_stats)
+
+        payload = {
+            "success": True,
+            "student_id": student_id,
+            "period": period,
+            "summary": {
+                "overall_progress": overall_progress,
+                "average_grade": avg_grade,
+                "total_study_hours": total_time,
+                "exercises_completed": exercises,
+                "streak_days": base_stats.get("streak_days", 0),
+                "weekly_progress": base_stats.get("weekly_progress", 0)
+            },
+            "subjects": subject_stats,
+            "sessions": study_sessions,
+            "trends": trends,
+            "badges": badges,
+            "recent_achievements": recent_achievements,
+            "generated_at": datetime.now().isoformat()
+        }
+        return JSONResponse(content=payload)
+    except Exception as e:
+        print(f"Error generando progreso: {e}")
+        raise HTTPException(status_code=500, detail="Error generando progreso")
+
+# Alias sin prefijo /api para compatibilidad cuando el frontend usa base sin /api
+@app.get("/students/{student_id}/progress")
+async def get_student_progress_alias(student_id: str, period: str = "week"):
+    return await get_student_progress(student_id, period)
 
 
 @app.get("/api/students/{student_id}/stats")
@@ -1776,22 +1971,15 @@ async def upload_document_real(
         if not REAL_LIBRARY_AVAILABLE:
             raise HTTPException(status_code=503, detail="Servicio de biblioteca real no disponible")
         
-        # Validar tipo de archivo - soportar todos los tipos del servicio mejorado
-        allowed_types = [
-            '.txt', '.md', '.pdf', '.doc', '.docx',  # Documentos
-            '.ppt', '.pptx',  # Presentaciones
-            '.xls', '.xlsx', '.csv',  # Hojas de cálculo
-            '.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff',  # Imágenes
-            '.html', '.htm', '.xml', '.json', '.yaml', '.yml',  # Datos estructurados
-            '.py', '.js', '.java', '.cpp', '.c', '.h',  # Código
-            '.log', '.rtf', '.odt'  # Otros
-        ]
+        # Validar tipo de archivo
+        allowed_types = ['.pdf', '.docx', '.txt']
         file_extension = os.path.splitext(file.filename)[1].lower()
         
-        # Si el archivo no tiene extensión, intentar procesarlo de todas formas
-        if file_extension and file_extension not in allowed_types:
-            # Solo advertir, no bloquear - dejar que el servicio interno maneje la validación
-            print(f"⚠️ Tipo de archivo {file_extension} puede no estar completamente soportado")
+        if file_extension not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Tipo de archivo no soportado. Tipos permitidos: {', '.join(allowed_types)}"
+            )
         
         # Leer contenido del archivo
         content = await file.read()
@@ -1989,6 +2177,85 @@ async def get_library_stats_real():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo estadísticas: {str(e)}")
+
+# === ASSIGNMENT SYSTEM (BÁSICO) ===
+
+from auth.google_auth import require_teacher, get_current_user
+
+@app.post("/api/assignments")
+async def create_assignment(request_data: dict, current_user=Depends(require_teacher)):
+    try:
+        # Asegurar que se registra el teacher_id desde el token si no viene
+        if "teacher_id" not in request_data:
+            request_data["teacher_id"] = current_user.get("sub")
+        item = assignment_service.create_assignment(request_data)
+        return {"success": True, "assignment": item}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/assignments")
+async def list_assignments(teacher_id: str | None = None):
+    try:
+        items = assignment_service.list_assignments(teacher_id=teacher_id)
+        return {"success": True, "assignments": items, "total": len(items)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/assignments/{assignment_id}")
+async def get_assignment(assignment_id: str):
+    item = assignment_service.get_assignment(assignment_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"success": True, "assignment": item}
+
+@app.post("/api/assignments/{assignment_id}/submit")
+async def submit_assignment(assignment_id: str, request_data: dict):
+    student_id = request_data.get("student_id") or request_data.get("studentId")
+    content = request_data.get("content", "")
+    if not student_id:
+        raise HTTPException(status_code=400, detail="student_id requerido")
+    sub = assignment_service.submit(assignment_id, student_id, content)
+    # Registrar actividad en stats
+    activity = {
+        "type": "assignment_submission",
+        "subject": assignment_service.get_assignment(assignment_id).get("subject", "General"),
+        "duration_minutes": 0,
+        "points_earned": 15,
+        "timestamp": datetime.now().isoformat()
+    }
+    student_stats_service.update_student_activity(student_id, activity)
+    return {"success": True, "submission": sub}
+
+@app.get("/api/assignments/{assignment_id}/submissions")
+async def list_submissions(assignment_id: str):
+    subs = assignment_service.list_submissions(assignment_id)
+    return {"success": True, "submissions": subs, "total": len(subs)}
+
+@app.post("/api/submissions/{submission_id}/grade")
+async def grade_submission(submission_id: str, request_data: dict, current_user=Depends(require_teacher)):
+    grade = request_data.get("grade")
+    feedback = request_data.get("feedback", "")
+    if grade is None:
+        raise HTTPException(status_code=400, detail="grade requerido")
+    updated = assignment_service.grade_submission(submission_id, float(grade), feedback)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Submission no encontrada")
+    return {"success": True, "submission": updated}
+
+@app.get("/api/students/{student_id}/assignments")
+async def list_assignments_for_student(student_id: str):
+    items = assignment_service.list_assignments_for_student(student_id)
+    return {"success": True, "assignments": items, "total": len(items)}
+
+@app.post("/api/assignments/{assignment_id}/status")
+async def update_assignment_status(assignment_id: str, request_data: dict, current_user=Depends(require_teacher)):
+    status = request_data.get("status")
+    if status not in {"active", "closed", "archived"}:
+        raise HTTPException(status_code=400, detail="status inválido")
+    updated = assignment_service.update_assignment_status(assignment_id, status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Assignment no encontrada")
+    return {"success": True, "assignment": updated}
 
 
 if __name__ == "__main__":
@@ -2345,27 +2612,21 @@ async def upload_document_enhanced(
         # Use enhanced library service
         contents = await file.read()
         result = await enhanced_library.upload_document(
+            file=file,
             file_content=contents,
-            filename=file.filename,
-            content_type=file.content_type,
-            metadata={
-                'ocr_enabled': ocr_enabled,
-                'chunk_size': chunk_size,
-                'chunk_overlap': chunk_overlap
-            }
+            ocr_enabled=ocr_enabled,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
         )
         
         return JSONResponse(content={
             "success": True,
-            "document_id": result.get("document_id", "unknown"),
-            "title": result.get("title", file.filename),
-            "filename": result.get("filename", file.filename),
+            "document_id": result["document_id"],
+            "title": result["title"],
             "chunks": result.get("chunks", 0),
-            "file_type": result.get("file_type", file.content_type),
-            "ocr_performed": result.get("ocr_performed", ocr_enabled),
-            "metadata": result.get("metadata", {}),
-            "service_used": result.get("service_used", "enhanced_library"),
-            "processed_content": result.get("processed_content", "")[:200] if result.get("processed_content") else ""
+            "file_type": result.get("file_type"),
+            "ocr_performed": result.get("ocr_performed", False),
+            "metadata": result.get("metadata", {})
         })
         
     except Exception as e:
@@ -2391,14 +2652,11 @@ async def upload_multiple_documents(
             try:
                 contents = await file.read()
                 result = await enhanced_library.upload_document(
+                    file=file,
                     file_content=contents,
-                    filename=file.filename,
-                    content_type=file.content_type,
-                    metadata={
-                        'ocr_enabled': ocr_enabled,
-                        'chunk_size': chunk_size,
-                        'chunk_overlap': chunk_overlap
-                    }
+                    ocr_enabled=ocr_enabled,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap
                 )
                 results.append({
                     "filename": file.filename,
@@ -2533,6 +2791,56 @@ async def get_document(document_id: str):
     except Exception as e:
         print(f"❌ Error getting document: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/library/document/{document_id}/ask")
+async def ask_specific_document(document_id: str, request_data: dict):
+    """Hacer pregunta enfocada a un documento específico.
+
+    Estrategia: recuperar el documento (o snippet) y pasar su contenido como contexto al agente RAG
+    para forzar que priorice esa fuente.
+    """
+    try:
+        if not REAL_LIBRARY_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Servicio de biblioteca real no disponible")
+
+        question = request_data.get("question", "")
+        if not question:
+            raise HTTPException(status_code=400, detail="Pregunta requerida")
+
+        # Obtener documento
+        if enhanced_library:
+            document = await enhanced_library.get_document(document_id)
+        else:
+            document = next((d for d in getattr(real_library, 'documents', []) if d.get("id") == document_id), None)
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+        # Construir contexto manual priorizando este documento
+        doc_content = document.get("content") or document.get("text") or document.get("raw_text") or ""
+        context_prefix = f"Contenido del documento '{document.get('title','Sin título')}' (ID {document_id}):\n\n{doc_content[:4000]}\n\n"
+
+        # Pasar pregunta al motor existente (ask_question) con refuerzo de contexto
+        # Si real_library.ask_question permite contexto adicional, usarlo; si no, pre-pend la pregunta
+        enriched_question = context_prefix + "Pregunta: " + question
+
+        answer = await real_library.ask_question(enriched_question)
+
+        return {
+            "success": True,
+            "document_id": document_id,
+            "question": question,
+            "answer": answer.get("answer") if isinstance(answer, dict) else answer,
+            "sources": answer.get("sources", []) if isinstance(answer, dict) else [],
+            "focused": True,
+            "message": "Respuesta generada enfocando el documento solicitado",
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error preguntando documento {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error procesando pregunta focalizada: {str(e)}")
 
 # ===== END ENHANCED LIBRARY ENDPOINTS =====
 

@@ -1,10 +1,28 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 import { Card, CardBody, CardHeader, Progress, Chip, Button, Select, SelectItem, Tabs, Tab } from '@nextui-org/react'
 import { TrendingUp, Award, Clock, Target, BookOpen, Brain, Calendar, BarChart3, PieChart, LineChart } from 'lucide-react'
-import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Cell, BarChart, Bar } from 'recharts'
+import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 import { useJuliaAgents } from '@/lib/juliaAgentService'
+
+// Añadir helper de fetch
+async function fetchProgress(studentName: string, period: string) {
+  const rawBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+  const base = rawBase.replace(/\/$/, '')
+  const pathApi = `${base}/students/${encodeURIComponent(studentName)}/progress?period=${period}`
+  let res = await fetch(pathApi)
+  if (res.status === 404) {
+    // Intentar sin /api por si el backend corre con alias
+    const alt = base.endsWith('/api')
+      ? base.replace(/\/api$/, '') + `/students/${encodeURIComponent(studentName)}/progress?period=${period}`
+      : base + `/students/${encodeURIComponent(studentName)}/progress?period=${period}`
+    res = await fetch(alt)
+  }
+  if (!res.ok) throw new Error('Failed to load progress')
+  return res.json()
+}
 
 interface ProgressTrackerProps {
   studentData: any
@@ -39,6 +57,8 @@ interface StudySession {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D']
 
 export default function ProgressTracker({ studentData }: ProgressTrackerProps) {
+  const { user } = useAuth() as any
+  const effectiveName = studentData?.name || user?.id
   const [progressData, setProgressData] = useState<SubjectProgress[]>([])
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [studySessions, setStudySessions] = useState<StudySession[]>([])
@@ -48,120 +68,63 @@ export default function ProgressTracker({ studentData }: ProgressTrackerProps) {
   const { agentService, logActivity } = useJuliaAgents()
 
   useEffect(() => {
-    loadProgressData()
-  }, [studentData, selectedPeriod])
+    if (effectiveName) loadProgressData()
+  }, [effectiveName, selectedPeriod])
 
   const loadProgressData = async () => {
     setIsLoading(true)
     try {
-      await logActivity(studentData?.name || 'student_demo', 'progress_tracker_access')
+  if (!effectiveName) return
+  await logActivity(effectiveName, 'progress_tracker_access')
+  const progress = await fetchProgress(effectiveName, selectedPeriod)
 
-      // Obtener datos del agente de analíticas
-      const analyticsData = await agentService.getStudentAnalytics(
-        studentData?.name || 'student_demo'
-      )
+      // Mapear subjects -> SubjectProgress shape
+      const subjectProgress: SubjectProgress[] = (progress.subjects || []).map((s: any) => ({
+        subject: s.subject,
+        progress: s.progress ?? 0,
+        grade: s.grade ?? 0,
+        trend: (s.trend as 'up'|'down'|'stable') || 'stable',
+        timeSpent: Math.round((s.time_spent_hours || 0) * 60),
+        completedTasks: s.exercises_completed || 0,
+        totalTasks: Math.max(s.exercises_completed || 0, 1)
+      }))
+      setProgressData(subjectProgress)
 
-      // Simular datos de progreso por materia
-      const mockProgressData: SubjectProgress[] = [
-        {
-          subject: 'Matemáticas',
-          progress: 78,
-          grade: 8.5,
-          trend: 'up',
-          timeSpent: 240,
-          completedTasks: 12,
-          totalTasks: 15
-        },
-        {
-          subject: 'Literatura',
-          progress: 65,
-          grade: 7.8,
-          trend: 'stable',
-          timeSpent: 180,
-          completedTasks: 8,
-          totalTasks: 12
-        },
-        {
-          subject: 'Química',
-          progress: 82,
-          grade: 9.0,
-          trend: 'up',
-          timeSpent: 300,
-          completedTasks: 10,
-          totalTasks: 11
-        },
-        {
-          subject: 'Historia',
-          progress: 56,
-          grade: 6.9,
-          trend: 'down',
-          timeSpent: 120,
-          completedTasks: 5,
-          totalTasks: 10
-        },
-        {
-          subject: 'Inglés',
-          progress: 89,
-          grade: 9.2,
-          trend: 'up',
-          timeSpent: 200,
-          completedTasks: 14,
-          totalTasks: 15
+      // Achievements: combinar recent_achievements y badges
+      const ach: Achievement[] = []
+      if (progress.recent_achievements) {
+        for (const a of progress.recent_achievements) {
+          ach.push({
+            id: a.id || a.title || Math.random().toString(36).slice(2),
+            title: a.title || a.name || 'Logro',
+            description: a.description || '',
+            icon: a.icon || '🏆',
+            unlockedAt: new Date(a.date || a.unlocked_date || Date.now()),
+            category: 'academic'
+          })
         }
-      ]
-
-      setProgressData(mockProgressData)
-
-      // Logros desbloqueados
-      const mockAchievements: Achievement[] = [
-        {
-          id: '1',
-          title: 'Madrugador',
-          description: 'Estudió 5 días seguidos antes de las 8 AM',
-          icon: '🌅',
-          unlockedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-          category: 'time'
-        },
-        {
-          id: '2',
-          title: 'Matemático Expert',
-          description: 'Completó 50 ejercicios de matemáticas',
-          icon: '🧮',
-          unlockedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-          category: 'academic'
-        },
-        {
-          id: '3',
-          title: 'Racha de Oro',
-          description: '10 días consecutivos de estudio',
-          icon: '🔥',
-          unlockedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-          category: 'streak'
-        },
-        {
-          id: '4',
-          title: 'Pensador Crítico',
-          description: 'Completó análisis avanzado con IA',
-          icon: '🧠',
-          unlockedAt: new Date(),
-          category: 'skill'
+      }
+      if (progress.badges) {
+        for (const b of progress.badges) {
+          ach.push({
+            id: b.id || b.name,
+            title: b.name || 'Badge',
+            description: b.description || '',
+            icon: b.icon || '🎖️',
+            unlockedAt: new Date(b.unlocked_date || Date.now()),
+            category: 'skill'
+          })
         }
-      ]
+      }
+      setAchievements(ach)
 
-      setAchievements(mockAchievements)
-
-      // Datos de sesiones de estudio
-      const mockStudySessions: StudySession[] = [
-        { date: '2024-01-14', duration: 120, subject: 'Matemáticas', performance: 85 },
-        { date: '2024-01-15', duration: 90, subject: 'Literatura', performance: 78 },
-        { date: '2024-01-16', duration: 150, subject: 'Química', performance: 92 },
-        { date: '2024-01-17', duration: 75, subject: 'Historia', performance: 65 },
-        { date: '2024-01-18', duration: 105, subject: 'Inglés', performance: 88 },
-        { date: '2024-01-19', duration: 135, subject: 'Matemáticas', performance: 79 },
-        { date: '2024-01-20', duration: 110, subject: 'Química', performance: 95 }
-      ]
-
-      setStudySessions(mockStudySessions)
+      const sessions: StudySession[] = (progress.sessions || []).map((sess: any) => ({
+        date: sess.date,
+        duration: sess.duration,
+        subject: sess.subject,
+        performance: sess.performance
+      }))
+      setStudySessions(sessions)
 
     } catch (error) {
       console.error('Error loading progress data:', error)
@@ -286,8 +249,8 @@ export default function ProgressTracker({ studentData }: ProgressTrackerProps) {
         </Card>
       </div>
 
-      {/* Navegación por pestañas */}
-      <Tabs selectedKey={selectedTab} onSelectionChange={setSelectedTab}>
+  {/* Navegación por pestañas */}
+  <Tabs selectedKey={selectedTab} onSelectionChange={(key) => setSelectedTab(String(key))}>
         <Tab 
           key="overview" 
           title={

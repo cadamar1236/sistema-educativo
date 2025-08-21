@@ -187,7 +187,8 @@ class LibraryService {
     content: string, 
     subject: string, 
     type: string = 'text', 
-    tags: string[] = []
+  tags: string[] = [],
+  studentId?: string
   ): Promise<UploadResponse> {
     try {
       const response = await fetch(`${API_BASE}/api/library/upload-text`, {
@@ -201,7 +202,8 @@ class LibraryService {
           subject,
           type,
           tags,
-          student_id: 'student_001'
+      // Incluir solo si tenemos identificador real del estudiante
+      ...(studentId ? { student_id: studentId } : {})
         }),
       });
 

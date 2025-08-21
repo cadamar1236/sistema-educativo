@@ -5,6 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import { libraryService } from '@/lib/libraryService';
 import type {
   LibraryDocument,
@@ -45,6 +46,8 @@ interface UseLibraryReturn {
 }
 
 export function useLibrary(): UseLibraryReturn {
+  const { user } = useAuth() as any;
+  const effectiveStudentId = user?.id || user?.email || undefined;
   // Estados principales
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const [documentsBySubject, setDocumentsBySubject] = useState<Record<string, LibraryDocument[]>>({});
@@ -120,7 +123,8 @@ export function useLibrary(): UseLibraryReturn {
         params.content,
         params.subject,
         params.file_type,
-        params.topic ? [params.topic] : []
+        params.topic ? [params.topic] : [],
+        effectiveStudentId
       );
       
       // Recargar documentos y estadísticas
@@ -136,7 +140,7 @@ export function useLibrary(): UseLibraryReturn {
     } finally {
       setUploading(false);
     }
-  }, [loadDocuments, loadStats]);
+  }, [loadDocuments, loadStats, effectiveStudentId]);
 
   /**
    * Buscar documentos

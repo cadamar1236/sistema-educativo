@@ -3,11 +3,11 @@
  * Proporciona datos actualizados y funciones para interactuar con el backend
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { statsService, DashboardStats, StudentStats } from '../lib/statsService';
 
 interface UseStudentStatsOptions {
-  studentId?: string;
+  studentId?: string; // si falta, el hook espera a que exista
   autoRefresh?: boolean;
   refreshInterval?: number; // en milisegundos
   onError?: (error: Error) => void;
@@ -22,7 +22,7 @@ interface UseStudentStatsReturn {
   lastUpdated: Date | null;
   
   // Funciones
-  refreshStats: () => Promise<void>;
+  refreshStats: (options?: { force?: boolean }) => Promise<void>;
   updateActivity: (activity: {
     type: 'lesson' | 'exercise' | 'quiz' | 'chat_session';
     subject?: string;
@@ -35,7 +35,7 @@ interface UseStudentStatsReturn {
 
 export function useStudentStats(options: UseStudentStatsOptions = {}): UseStudentStatsReturn {
   const {
-    studentId = 'student_001',
+  studentId,
     autoRefresh = true,
     refreshInterval = 300000, // 5 minutos por defecto
     onError
@@ -53,37 +53,38 @@ export function useStudentStats(options: UseStudentStatsOptions = {}): UseStuden
     setError(null);
   }, []);
 
+  // Ref para evitar doble fetch inicial en StrictMode (montaje-desmontaje-montaje)
+  const didInitialFetchRef = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const inFlightRef = useRef<Promise<void> | null>(null);
+
   // Función para cargar estadísticas del dashboard
-  const refreshStats = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Cargar estadísticas del dashboard (incluye datos del estudiante)
-      const dashboardData = await statsService.getDashboardStats(studentId);
-      setDashboardStats(dashboardData);
-      setStudentStats(dashboardData.student);
-      
-      setLastUpdated(new Date());
-      
-      console.log('✅ Estadísticas actualizadas:', {
-        student: dashboardData.student.name,
-        progress: dashboardData.student.overall_progress,
-        streak: dashboardData.student.streak_days
-      });
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al cargar estadísticas';
-      setError(errorMessage);
-      
-      if (onError) {
-        onError(err instanceof Error ? err : new Error(errorMessage));
+  const refreshStats = useCallback(async (opts: { force?: boolean } = {}) => {
+    if (!studentId) return;
+    if (inFlightRef.current) return inFlightRef.current; // evita solapamiento
+    if (didInitialFetchRef.current && !opts.force) return; // evita repetición inmediata
+    const p = (async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const ds = await statsService.getDashboardStats(studentId);
+        setDashboardStats(ds);
+        setStudentStats(ds.student);
+        setLastUpdated(new Date());
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Error desconocido al cargar estadísticas';
+        setError(errorMessage);
+        if (onError) {
+          onError(err instanceof Error ? err : new Error(errorMessage));
+        }
+      } finally {
+        setIsLoading(false);
+        didInitialFetchRef.current = true;
+        inFlightRef.current = null;
       }
-      
-      console.error('❌ Error cargando estadísticas:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    })();
+    inFlightRef.current = p;
+    return p;
   }, [studentId, onError]);
 
   // Función para actualizar actividad del estudiante
@@ -95,11 +96,9 @@ export function useStudentStats(options: UseStudentStatsOptions = {}): UseStuden
     success_rate?: number;
   }) => {
     try {
+      if (!studentId) return;
       await statsService.updateStudentActivity(studentId, activity);
-      
-      // Refrescar estadísticas después de actualizar actividad
-      await refreshStats();
-      
+  await refreshStats({ force: true });
       console.log('✅ Actividad actualizada:', activity);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error actualizando actividad';
@@ -115,19 +114,27 @@ export function useStudentStats(options: UseStudentStatsOptions = {}): UseStuden
 
   // Efecto para carga inicial
   useEffect(() => {
-    refreshStats();
-  }, [refreshStats]);
+    if (!studentId) return;
+    // Primera carga forzada
+    refreshStats({ force: true });
+  }, [studentId, refreshStats]);
 
   // Efecto para actualización automática
   useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
+    if (!autoRefresh || !studentId) return;
+    // Evitar crear múltiples intervalos (StrictMode / remounts)
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    intervalRef.current = setInterval(() => {
       refreshStats();
     }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [refreshStats, autoRefresh, refreshInterval]);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [refreshStats, autoRefresh, refreshInterval, studentId]);
 
   return {
     dashboardStats,
@@ -142,7 +149,7 @@ export function useStudentStats(options: UseStudentStatsOptions = {}): UseStuden
 }
 
 // Hook simplificado solo para estadísticas del estudiante
-export function useStudentBasicStats(studentId: string = 'student_001') {
+export function useStudentBasicStats(studentId?: string) {
   const [stats, setStats] = useState<StudentStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +158,7 @@ export function useStudentBasicStats(studentId: string = 'student_001') {
     const loadStats = async () => {
       try {
         setIsLoading(true);
+        if (!studentId) { setIsLoading(false); return; }
         const data = await statsService.getStudentStats(studentId);
         setStats(data);
         setError(null);
@@ -160,15 +168,14 @@ export function useStudentBasicStats(studentId: string = 'student_001') {
         setIsLoading(false);
       }
     };
-
-    loadStats();
+    if (studentId) loadStats(); else setIsLoading(false);
   }, [studentId]);
 
   return { stats, isLoading, error };
 }
 
 // Hook para recomendaciones personalizadas
-export function usePersonalizedRecommendations(studentId: string = 'student_001') {
+export function usePersonalizedRecommendations(studentId?: string) {
   const [recommendations, setRecommendations] = useState<DashboardStats['recommendations']>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -176,6 +183,7 @@ export function usePersonalizedRecommendations(studentId: string = 'student_001'
   const refreshRecommendations = useCallback(async () => {
     try {
       setIsLoading(true);
+      if (!studentId) { setIsLoading(false); return; }
       const data = await statsService.getPersonalizedRecommendations(studentId);
       setRecommendations(data);
       setError(null);
@@ -187,8 +195,8 @@ export function usePersonalizedRecommendations(studentId: string = 'student_001'
   }, [studentId]);
 
   useEffect(() => {
-    refreshRecommendations();
-  }, [refreshRecommendations]);
+    if (studentId) refreshRecommendations(); else setIsLoading(false);
+  }, [refreshRecommendations, studentId]);
 
   return { 
     recommendations, 

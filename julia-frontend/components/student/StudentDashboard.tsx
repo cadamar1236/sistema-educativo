@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 import { Card, CardBody, CardHeader, Progress, Avatar, Badge, Chip, Button, Tabs, Tab } from '@nextui-org/react'
 import { 
   BookOpen, 
@@ -23,20 +24,31 @@ import {
   Activity,
   Flame,
   BarChart3,
-  Users
+  Users,
+  Library
 } from 'lucide-react'
 import AgentChat from './AgentChat'
 import MultiAgentChat from './MultiAgentChat'
 import { useStudentStats } from '../../hooks/useStudentStats'
+import StudyPlanner from './StudyPlanner'
+import ProgressTrackerReal from './ProgressTrackerReal'
+import AICoachReal from './AICoachReal'
+import VirtualClassroom from './VirtualClassroom'
+import EducationalLibrary from '@/components/library/EducationalLibrary'
 
 interface StudentDashboardProps {
   studentId?: string;
 }
 
-export default function StudentDashboard({ studentId = 'student_001' }: StudentDashboardProps) {
+export default function StudentDashboard({ studentId }: StudentDashboardProps) {
+  const { user, loading: authLoading } = useAuth() as any
+  // Queremos usar SOLO el email como identificador estable para evitar doble fetch (id numérico -> email)
+  // Si se pasa explícito via prop, lo respetamos. No caemos a user.id para evitar la primera petición indeseada.
+  const effectiveStudentId = studentId || user?.email || undefined
   const [selectedTab, setSelectedTab] = useState('dashboard')
   
   // Hook para obtener estadísticas reales
+  const statsHookEnabled = !!effectiveStudentId
   const { 
     dashboardStats, 
     studentStats, 
@@ -46,11 +58,42 @@ export default function StudentDashboard({ studentId = 'student_001' }: StudentD
     refreshStats,
     updateActivity,
     clearError 
-  } = useStudentStats({ 
-    studentId,
+  } = useStudentStats(statsHookEnabled ? { 
+    studentId: effectiveStudentId,
     autoRefresh: true,
     refreshInterval: 300000 // 5 minutos
-  })
+  } : { studentId: '__disabled__', autoRefresh: false, refreshInterval: 99999999 } as any)
+
+  // Mientras esperamos específicamente el email (para evitar una llamada previa con el id numérico)
+  if (!studentId && !authLoading && user && !user.email) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Card className="w-72 p-6">
+          <CardBody className="text-center space-y-3">
+            <RefreshCw className="h-10 w-10 mx-auto animate-spin text-blue-500" />
+            <p className="text-sm text-gray-600">Preparando tu sesión...</p>
+          </CardBody>
+        </Card>
+      </div>
+    )
+  }
+  // Mientras autenticación sigue cargando y no hay id
+  if (authLoading && !effectiveStudentId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Card className="w-72 p-6">
+          <CardBody className="text-center space-y-3">
+            <RefreshCw className="h-10 w-10 mx-auto animate-spin text-blue-500" />
+            <p className="text-sm text-gray-600">Cargando usuario...</p>
+          </CardBody>
+        </Card>
+      </div>
+    )
+  }
+  // Si terminó auth y seguimos sin ID, mostrar error breve
+  if (!authLoading && !effectiveStudentId) {
+    return <div className="p-6 text-sm text-red-600">No se pudo determinar el ID del estudiante.</div>
+  }
   
   const getProgressColor = (value: number) => {
     if (value >= 80) return 'success'
@@ -134,6 +177,8 @@ export default function StudentDashboard({ studentId = 'student_001' }: StudentD
     )
   }
 
+  const minimalStudentData = { name: studentStats?.name || effectiveStudentId }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto">
@@ -173,7 +218,7 @@ export default function StudentDashboard({ studentId = 'student_001' }: StudentD
             variant="flat"
             size="sm"
             isLoading={isLoading}
-            onPress={refreshStats}
+            onPress={() => refreshStats()}
             startContent={<RefreshCw className="h-4 w-4" />}
           >
             Actualizar
@@ -199,7 +244,7 @@ export default function StudentDashboard({ studentId = 'student_001' }: StudentD
         )}
 
         {/* Navegación por pestañas */}
-        <Tabs 
+  <Tabs 
           selectedKey={selectedTab} 
           onSelectionChange={(key) => setSelectedTab(key as string)}
           size="lg"
@@ -461,6 +506,51 @@ export default function StudentDashboard({ studentId = 'student_001' }: StudentD
                 </Card>
               </div>
             </div>
+          </Tab>
+
+          <Tab key="planner" title={
+            <div className="flex items-center space-x-2">
+              <Calendar className="h-4 w-4" />
+              <span>Planificador</span>
+            </div>
+          }>
+            <StudyPlanner studentData={minimalStudentData} />
+          </Tab>
+
+          <Tab key="progress" title={
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="h-4 w-4" />
+              <span>Progreso</span>
+            </div>
+          }>
+            <ProgressTrackerReal studentData={minimalStudentData} />
+          </Tab>
+
+            <Tab key="coach" title={
+            <div className="flex items-center space-x-2">
+              <Brain className="h-4 w-4" />
+              <span>Coach IA</span>
+            </div>
+          }>
+            <AICoachReal studentData={minimalStudentData} />
+          </Tab>
+
+          <Tab key="classroom" title={
+            <div className="flex items-center space-x-2">
+              <Users className="h-4 w-4" />
+              <span>Aula Virtual</span>
+            </div>
+          }>
+            <VirtualClassroom studentData={minimalStudentData} />
+          </Tab>
+
+          <Tab key="library" title={
+            <div className="flex items-center space-x-2">
+              <Library className="h-4 w-4" />
+              <span>Biblioteca</span>
+            </div>
+          }>
+            <EducationalLibrary />
           </Tab>
 
           <Tab key="multiagent-chat" title={

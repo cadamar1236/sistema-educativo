@@ -92,21 +92,32 @@ class StatsService {
   private baseUrl: string;
 
   constructor(baseUrl: string = '') {
-    // En el cliente (Next.js), usar rutas relativas para aprovechar el proxy
-    this.baseUrl = baseUrl || '';
+    const envBase = (typeof process !== 'undefined' ? (process as any).env?.NEXT_PUBLIC_API_URL : '') || '';
+    const cleaned = (baseUrl || envBase).replace(/\/$/, '');
+    this.baseUrl = cleaned; // puede estar vacío para usar rutas relativas (/api)
   }
 
   /**
    * Obtiene las estadísticas completas del dashboard para un estudiante
    */
-  async getDashboardStats(studentId: string = 'student_001'): Promise<DashboardStats> {
+  async getDashboardStats(studentId: string): Promise<DashboardStats> {
+    if (!studentId) throw new Error('studentId requerido');
     try {
-      const response = await fetch(`${this.baseUrl}/api/students/${studentId}/dashboard-stats`, {
+      const apiRoot = this.baseUrl
+        ? (/\/api$/.test(this.baseUrl) ? this.baseUrl : `${this.baseUrl}/api`)
+        : '/api';
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000); // 6s timeout
+
+      const response = await fetch(`${apiRoot}/students/${studentId}/dashboard-stats`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
+        signal: controller.signal
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
@@ -117,8 +128,8 @@ class StatsService {
       console.log('✅ Estadísticas del dashboard obtenidas:', data);
       
       return data;
-    } catch (error) {
-      console.error('Error obteniendo estadísticas del dashboard:', error);
+    } catch (error: any) {
+      console.error('Error obteniendo estadísticas del dashboard:', error?.message || error);
       
       // Fallback con datos simulados si el backend no está disponible
       return this.getFallbackStats(studentId);
@@ -128,14 +139,22 @@ class StatsService {
   /**
    * Obtiene estadísticas específicas del estudiante
    */
-  async getStudentStats(studentId: string = 'student_001'): Promise<StudentStats> {
+  async getStudentStats(studentId: string): Promise<StudentStats> {
+    if (!studentId) throw new Error('studentId requerido');
     try {
-      const response = await fetch(`${this.baseUrl}/api/students/${studentId}/stats`, {
+      const apiRoot = this.baseUrl
+        ? (/\/api$/.test(this.baseUrl) ? this.baseUrl : `${this.baseUrl}/api`)
+        : '/api';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const response = await fetch(`${apiRoot}/students/${studentId}/stats`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
+        signal: controller.signal
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
@@ -146,8 +165,8 @@ class StatsService {
       console.log('✅ Estadísticas del estudiante obtenidas:', data);
       
       return data;
-    } catch (error) {
-      console.error('Error obteniendo estadísticas del estudiante:', error);
+    } catch (error: any) {
+      console.error('Error obteniendo estadísticas del estudiante:', error?.message || error);
       throw error;
     }
   }
@@ -193,12 +212,19 @@ class StatsService {
    */
   async getPersonalizedRecommendations(studentId: string): Promise<DashboardStats['recommendations']> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/students/${studentId}/recommendations`, {
+      const apiRoot = this.baseUrl
+        ? (/\/api$/.test(this.baseUrl) ? this.baseUrl : `${this.baseUrl}/api`)
+        : '/api';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const response = await fetch(`${apiRoot}/students/${studentId}/recommendations`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
+        signal: controller.signal
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
@@ -209,8 +235,8 @@ class StatsService {
       console.log('✅ Recomendaciones personalizadas obtenidas:', data);
       
       return data.recommendations || [];
-    } catch (error) {
-      console.error('Error obteniendo recomendaciones:', error);
+    } catch (error: any) {
+      console.error('Error obteniendo recomendaciones:', error?.message || error);
       return [];
     }
   }
@@ -224,8 +250,8 @@ class StatsService {
     
     return {
       student: {
-        student_id: studentId,
-        name: 'Estudiante Demo',
+  student_id: studentId,
+  name: studentId,
         grade: '10° Grado',
         current_level: 'Intermedio Alto',
         overall_progress: 78,
@@ -345,36 +371,17 @@ class StatsService {
         }
       },
       system_status: {
-        agents_active: 5,
-        total_agents: 5,
+        agents_active: 0,
+        total_agents: 0,
         last_interaction: new Date(now.getTime() - 300000).toISOString(),
         system_health: 'good'
       },
-      recommendations: [
-        {
-          type: 'focus_area',
-          title: 'Reforzar Química',
-          description: 'Tu progreso en química está por debajo del promedio. Te recomendamos 30 minutos extra los martes y jueves.',
-          priority: 'high'
-        },
-        {
-          type: 'study_plan',
-          title: 'Optimizar horario de estudio',
-          description: 'Tu mejor rendimiento es entre 2-4 PM. Programa las materias más difíciles en ese horario.',
-          priority: 'medium'
-        },
-        {
-          type: 'motivation',
-          title: '¡Vas muy bien!',
-          description: 'Tu racha de 12 días es excelente. Mantén este ritmo para alcanzar tu meta semanal.',
-          priority: 'low'
-        }
-      ]
+      recommendations: []
     };
   }
 }
 
 // Crear instancia por defecto con la URL del backend FastAPI
-const statsService = new StatsService('http://localhost:8000');
+const statsService = new StatsService();
 
 export { StatsService, statsService };

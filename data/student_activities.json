@@ -220,6 +220,147 @@
       "points_earned": 10,
       "timestamp": "2025-08-12T19:16:10.105819",
       "date": "2025-08-12"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "tutor",
+        "exam_generator"
+      ],
+      "subject": "Tutoría General",
+      "message": "generame un examen de 10 preguntas",
+      "duration_minutes": 1,
+      "points_earned": 55,
+      "hour": 13,
+      "agents_count": 2,
+      "is_multi_agent": true,
+      "timestamp": "2025-08-18T13:34:01.677997",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 13.265790462493896,
+      "response_status": 200,
+      "hour": 13,
+      "auto_tracked": true,
+      "timestamp": "2025-08-18T13:34:01.922479",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "curriculum_creator"
+      ],
+      "subject": "Planificación",
+      "message": "creame un plan de curriculum para estudiar matematicas",
+      "duration_minutes": 1,
+      "points_earned": 22,
+      "hour": 13,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-18T13:34:44.276677",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 3.9834682941436768,
+      "response_status": 200,
+      "hour": 13,
+      "auto_tracked": true,
+      "timestamp": "2025-08-18T13:34:44.359664",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-18T13:34:44.477215",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-18T13:34:44.567156",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "performance_analyzer"
+      ],
+      "subject": "Análisis Académico",
+      "message": "analizame mi rendimiento",
+      "duration_minutes": 1,
+      "points_earned": 18,
+      "hour": 13,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-18T13:35:06.224906",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 3.35357666015625,
+      "response_status": 200,
+      "hour": 13,
+      "auto_tracked": true,
+      "timestamp": "2025-08-18T13:35:06.327743",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-18T13:35:06.804552",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "tutor"
+      ],
+      "subject": "Tutoría General",
+      "message": "dime que es una derivada",
+      "duration_minutes": 1,
+      "points_earned": 30,
+      "hour": 13,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "timestamp": "2025-08-18T13:54:01.331908",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "api_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 6.6907734870910645,
+      "response_status": 200,
+      "hour": 13,
+      "auto_tracked": true,
+      "timestamp": "2025-08-18T13:54:01.714351",
+      "date": "2025-08-18"
+    },
+    {
+      "type": "chat_session",
+      "duration_minutes": 5,
+      "points_earned": 10,
+      "timestamp": "2025-08-18T13:54:02.239654",
+      "date": "2025-08-18"
     }
   ]
 }
