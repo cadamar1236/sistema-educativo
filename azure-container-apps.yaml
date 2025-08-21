@@ -1,0 +1,214 @@
+# Azure Container Apps Configuration
+# Educational System - Production Environment
+
+# Registry Configuration
+registry:
+  name: educationalacr
+  resourceGroup: educational-system-rg
+  sku: Basic
+
+# Container Apps Environment
+environment:
+  name: educational-env
+  resourceGroup: educational-system-rg
+  location: eastus
+
+# Applications
+applications:
+  # Main API Application
+  api:
+    name: educational-api
+    image: educationalacr.azurecr.io/educational-app:latest
+    replicas:
+      min: 2
+      max: 10
+    cpu: 1.0
+    memory: 2Gi
+    port: 8000
+    ingress:
+      external: true
+      targetPort: 8000
+    env:
+      - name: ENVIRONMENT
+        value: "production"
+      - name: WORKERS
+        value: "4"
+      - name: UVICORN_WORKERS
+        value: "4"
+      - name: UVICORN_HOST
+        value: "0.0.0.0"
+      - name: UVICORN_PORT
+        value: "8000"
+      - name: DATABASE_URL
+        secretRef: database-url
+      - name: REDIS_URL
+        secretRef: redis-url
+      - name: RABBITMQ_URL
+        secretRef: rabbitmq-url
+      - name: GROQ_API_KEY
+        secretRef: groq-api-key
+      - name: OPENAI_API_KEY
+        secretRef: openai-api-key
+
+  # PostgreSQL Database
+  postgres:
+    name: educational-postgres
+    image: postgres:15-alpine
+    replicas:
+      min: 1
+      max: 1
+    cpu: 0.5
+    memory: 1Gi
+    port: 5432
+    ingress:
+      external: false
+      targetPort: 5432
+    env:
+      - name: POSTGRES_DB
+        value: "educational_system"
+      - name: POSTGRES_USER
+        value: "admin"
+      - name: POSTGRES_PASSWORD
+        secretRef: postgres-password
+      - name: POSTGRES_REPLICA_USER
+        value: "replica"
+      - name: POSTGRES_REPLICA_PASSWORD
+        secretRef: postgres-replica-password
+
+  # Redis Cache
+  redis:
+    name: educational-redis
+    image: redis:7-alpine
+    replicas:
+      min: 1
+      max: 1
+    cpu: 0.25
+    memory: 0.5Gi
+    port: 6379
+    ingress:
+      external: false
+      targetPort: 6379
+    env:
+      - name: REDIS_PASSWORD
+        secretRef: redis-password
+    args:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - "$(REDIS_PASSWORD)"
+      - --maxmemory
+      - "512mb"
+      - --maxmemory-policy
+      - allkeys-lru
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    name: educational-rabbitmq
+    image: rabbitmq:3-management-alpine
+    replicas:
+      min: 1
+      max: 1
+    cpu: 0.5
+    memory: 1Gi
+    ports:
+      - 5672
+      - 15672
+    ingress:
+      external: false
+    env:
+      - name: RABBITMQ_DEFAULT_USER
+        value: "admin"
+      - name: RABBITMQ_DEFAULT_PASS
+        secretRef: rabbitmq-password
+
+# Secrets
+secrets:
+  postgres-password:
+    value: "secure_password_2024"
+  postgres-replica-password:
+    value: "replica_password_2024"
+  redis-password:
+    value: "redis_password_2024"
+  rabbitmq-password:
+    value: "rabbit_password_2024"
+  database-url:
+    value: "postgresql://admin:secure_password_2024@educational-postgres:5432/educational_system"
+  redis-url:
+    value: "redis://default:redis_password_2024@educational-redis:6379/0"
+  rabbitmq-url:
+    value: "amqp://admin:rabbit_password_2024@educational-rabbitmq:5672/"
+  groq-api-key:
+    value: "your-groq-api-key-here"
+  openai-api-key:
+    value: "your-openai-api-key-here"
+
+# Scaling Configuration
+scaling:
+  rules:
+    - name: cpu-scaling
+      type: cpu
+      metadata:
+        metricType: Utilization
+        metricValue: "70"
+      auth: []
+    - name: memory-scaling
+      type: memory
+      metadata:
+        metricType: Utilization
+        metricValue: "80"
+      auth: []
+
+# Resource Limits
+resources:
+  limits:
+    cpu: "2.0"
+    memory: "4Gi"
+  requests:
+    cpu: "0.5"
+    memory: "1Gi"
+
+# Monitoring
+monitoring:
+  enabled: true
+  workspace: educational-workspace
+  logAnalytics:
+    enabled: true
+    retention: 30
+
+# Health Checks
+health:
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Network Configuration
+network:
+  vnet:
+    enabled: false
+  serviceMesh:
+    enabled: false
+
+# Security
+security:
+  cors:
+    enabled: true
+    origins:
+      - "https://educational-api.azurecontainerapps.io"
+      - "https://your-domain.com"
+  https:
+    enabled: true
+    redirect: true
