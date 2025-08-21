@@ -1,0 +1,249 @@
+version: '3.8'
+
+services:
+  # PostgreSQL con replicación maestro-esclavo
+  postgres-primary:
+    image: postgres:15-alpine
+    container_name: postgres-primary
+    environment:
+      - POSTGRES_DB=educational_system
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure_password_2024}
+      - POSTGRES_REPLICA_USER=replica
+      - POSTGRES_REPLICA_PASSWORD=${POSTGRES_REPLICA_PASSWORD:-replica_password_2024}
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./config/postgres/init-primary.sql:/docker-entrypoint-initdb.d/init-primary.sql
+    ports:
+      - "5432:5432"
+    command: >
+      postgres 
+      -c wal_level=replica
+      -c hot_standby=on
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+    networks:
+      - educational-network
+
+  postgres-replica:
+    image: postgres:15-alpine
+    container_name: postgres-replica
+    environment:
+      - PGUSER=replica
+      - POSTGRES_PASSWORD=${POSTGRES_REPLICA_PASSWORD:-replica_password_2024}
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    depends_on:
+      - postgres-primary
+    command: >
+      bash -c "
+        until pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U replica -v -P -W --checkpoint=fast --write-recovery-conf --slot=replica_slot --create-slot;
+        do
+          echo 'Waiting for primary to be ready...'
+          sleep 5
+        done
+        exec docker-entrypoint.sh postgres
+      "
+    networks:
+      - educational-network
+
+  # Redis Cluster con alta disponibilidad
+  redis-master:
+    image: redis:7-alpine
+    container_name: redis-master
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password_2024} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_master_data:/data
+    networks:
+      - educational-network
+
+  redis-slave:
+    image: redis:7-alpine
+    container_name: redis-slave
+    command: redis-server --slaveof redis-master 6379 --masterauth ${REDIS_PASSWORD:-redis_password_2024} --requirepass ${REDIS_PASSWORD:-redis_password_2024}
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_slave_data:/data
+    depends_on:
+      - redis-master
+    networks:
+      - educational-network
+
+  # RabbitMQ para colas de mensajes
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-rabbit_password_2024}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - educational-network
+
+  # API Gateway con Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./config/nginx/sites-available:/etc/nginx/sites-available
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - api
+    networks:
+      - educational-network
+
+  # Aplicación principal con escalado horizontal
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.production
+    container_name: educational-api
+    environment:
+      - DATABASE_URL=postgresql://admin:${POSTGRES_PASSWORD:-secure_password_2024}@postgres-primary:5432/educational_system
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis_password_2024}@redis-master:6379/0
+      - RABBITMQ_URL=amqp://admin:${RABBITMQ_PASSWORD:-rabbit_password_2024}@rabbitmq:5672/
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - ENVIRONMENT=production
+      - WORKERS=4
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - postgres-primary
+      - redis-master
+      - rabbitmq
+    networks:
+      - educational-network
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # Worker para tareas asíncronas
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: educational-worker
+    environment:
+      - DATABASE_URL=postgresql://admin:${POSTGRES_PASSWORD:-secure_password_2024}@postgres-primary:5432/educational_system
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis_password_2024}@redis-master:6379/0
+      - RABBITMQ_URL=amqp://admin:${RABBITMQ_PASSWORD:-rabbit_password_2024}@rabbitmq:5672/
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - ENVIRONMENT=production
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - postgres-primary
+      - redis-master
+      - rabbitmq
+    networks:
+      - educational-network
+
+  # Monitoreo con Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - educational-network
+
+  # Grafana para dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-grafana_password_2024}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - educational-network
+
+  # Elasticsearch para logs
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - educational-network
+
+  # Logstash para procesamiento de logs
+  logstash:
+    image: logstash:8.11.0
+    container_name: logstash
+    volumes:
+      - ./config/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./logs:/var/log/app
+    depends_on:
+      - elasticsearch
+    networks:
+      - educational-network
+
+  # Kibana para visualización de logs
+  kibana:
+    image: kibana:8.11.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - educational-network
+
+volumes:
+  postgres_primary_data:
+  postgres_replica_data:
+  redis_master_data:
+  redis_slave_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+  elasticsearch_data:
+
+networks:
+  educational-network:
+    driver: bridge

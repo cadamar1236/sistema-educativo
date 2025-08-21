@@ -1,0 +1,47 @@
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/uploads /app/cache
+
+# Environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Create worker script
+RUN cat > /app/worker.py << 'EOF'
+#!/usr/bin/env python3
+import asyncio
+import logging
+from src.services.worker_service import WorkerService
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+async def main():
+    worker = WorkerService()
+    await worker.start()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+EOF
+
+# Run the worker
+CMD ["python", "worker.py"]
