@@ -9,22 +9,8 @@ const nextConfig = {
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
-  async rewrites() {
-    return [
-      {
-        source: '/api/agents/:path*',
-        destination: '/api/agents/:path*',
-      },
-      {
-        source: '/api/students/:path*',
-        destination: '/api/students/:path*',
-      },
-      {
-        source: '/api/system/:path*',
-        destination: '/api/system/:path*',
-      },
-    ]
-  },
+  // Removemos rewrites porque no funcionan con export estático
+  // Las llamadas a la API se manejarán directamente desde el cliente
 }
 
 module.exports = nextConfig
