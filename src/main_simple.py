@@ -4,7 +4,8 @@ API principal del sistema educativo multiagente - versión simplificada
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 from typing import List, Optional, Dict, Any
 import json
@@ -106,6 +107,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Configurar archivos estáticos para el frontend
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+    print("✅ Archivos estáticos del frontend configurados en /static")
+
+# Ruta para servir la aplicación React/Next.js
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    """Servir la aplicación frontend"""
+    static_path = "static/index.html"
+    if os.path.exists(static_path):
+        return FileResponse(static_path)
+    else:
+        return HTMLResponse("""
+        <html>
+            <body>
+                <h1>🎓 Sistema Educativo Multiagente</h1>
+                <p>Backend API funcionando correctamente</p>
+                <p><a href="/docs">Ver documentación de la API</a></p>
+            </body>
+        </html>
+        """)
+
+# Ruta catch-all para SPA routing
+@app.get("/{path_name:path}", response_class=HTMLResponse)
+async def catch_all(path_name: str):
+    """Manejar rutas del SPA que no son de la API"""
+    # Si es una ruta de API, no interceptar
+    if path_name.startswith("api/") or path_name.startswith("docs") or path_name.startswith("openapi.json"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
+    # Para todas las demás rutas, servir el index.html (SPA routing)
+    static_path = "static/index.html"
+    if os.path.exists(static_path):
+        return FileResponse(static_path)
+    else:
+        raise HTTPException(status_code=404, detail="Frontend not found")
 
 # Registrar routers de auth si están disponibles
 if _AUTH_ROUTERS_AVAILABLE:
@@ -2856,10 +2895,25 @@ if __name__ == "__main__":
     if AGENTS_AVAILABLE:
         print(f"� Agentes configurados: {list(agent_manager.agents.keys())}")
     
-    # Iniciar servidor
-    uvicorn.run(
-        "main_simple:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True
-    )
+    # Iniciar servidor con configuración según el entorno
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    environment = os.getenv("ENVIRONMENT", "development")
+    
+    if environment == "production":
+        # Configuración para producción
+        uvicorn.run(
+            "src.main_simple:app",
+            host=host,
+            port=port,
+            reload=False,
+            workers=1
+        )
+    else:
+        # Configuración para desarrollo
+        uvicorn.run(
+            "main_simple:app",
+            host=host,
+            port=port,
+            reload=True
+        )

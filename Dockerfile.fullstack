@@ -1,0 +1,87 @@
+# Multi-stage Dockerfile: Frontend (Next.js) + Backend (FastAPI) en una imagen
+FROM# Comando de inicio - usando main_simple
+CMD ["python", "-m", "uvicorn", "src.main_simple:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]ode:18-alpine AS frontend-builder
+
+# Configurar directorio de trabajo para frontend
+WORKDIR /app/frontend
+
+# Copiar archivos de configuración de Next.js
+COPY julia-frontend/package*.json ./
+COPY julia-frontend/next.config.js ./
+COPY julia-frontend/tailwind.config.ts ./
+COPY julia-frontend/postcss.config.js ./
+COPY julia-frontend/tsconfig.json ./
+COPY julia-frontend/next-env.d.ts ./
+
+# Instalar dependencias
+RUN npm ci --only=production --legacy-peer-deps
+
+# Copiar código fuente del frontend
+COPY julia-frontend/ ./
+
+# Build del frontend (genera carpeta .next y out)
+RUN npm run build
+
+# ====================================================================
+# Stage 2: Backend Python con FastAPI
+FROM python:3.11-slim AS backend-builder
+
+# Instalar dependencias del sistema para compilación
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar requirements y instalar dependencias Python
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# ====================================================================
+# Stage 3: Imagen final de producción
+FROM python:3.11-slim
+
+# Crear usuario no-root
+RUN useradd --create-home --shell /bin/bash app
+
+# Instalar curl para health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar dependencias Python del builder
+COPY --from=backend-builder /root/.local /home/app/.local
+
+# Copiar build del frontend desde el primer stage
+COPY --from=frontend-builder /app/frontend/.next ./frontend/.next
+COPY --from=frontend-builder /app/frontend/out ./frontend/out
+COPY --from=frontend-builder /app/frontend/public ./frontend/public
+COPY --from=frontend-builder /app/frontend/package.json ./frontend/package.json
+
+# Copiar código del backend
+COPY . .
+
+# Crear directorios necesarios y cambiar propietario
+RUN mkdir -p /app/data/uploads /app/data/temp /app/logs && \
+    chown -R app:app /app
+
+# Cambiar a usuario no-root
+USER app
+
+# Configurar variables de entorno
+ENV PATH=/home/app/.local/bin:$PATH
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV FRONTEND_BUILD_DIR=/app/frontend/.next
+
+# Exponer puerto
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Comando de inicio
+CMD ["python", "-m", "uvicorn", "src.main_fullstack:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
