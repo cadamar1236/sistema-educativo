@@ -1,58 +1,67 @@
-FROM python:3.11-slim as builder
+# Dockerfile específico para main_simple.py con fullstack
+FROM node:18-slim as frontend-builder
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Copiar archivos del frontend
+COPY julia-frontend/package*.json ./
+RUN npm install
 
-# Production stage
+# Copiar código fuente del frontend
+COPY julia-frontend/ ./
+
+# Construir frontend para producción
+RUN npm run build
+
+# Stage final - Backend Python
 FROM python:3.11-slim
 
-# Install runtime dependencies
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    libpq-dev \
     curl \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
+# Crear usuario no-root
 RUN useradd --create-home --shell /bin/bash app
 
-# Set working directory
 WORKDIR /app
 
-# Copy Python packages from builder
-COPY --from=builder /root/.local /home/app/.local
+# Copiar requirements y instalar dependencias Python
+COPY requirements*.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY --chown=app:app . .
-
-# Create necessary directories
-RUN mkdir -p /app/logs /app/uploads /app/cache && \
+# Crear directorios necesarios
+RUN mkdir -p /app/data/uploads /app/data/temp /app/logs /app/static && \
     chown -R app:app /app
 
-# Switch to non-root user
+# Copiar código de la aplicación
+COPY . .
+
+# Copiar frontend build desde el stage anterior
+COPY --from=frontend-builder /app/.next/standalone ./static/
+COPY --from=frontend-builder /app/.next/static ./static/_next/static/
+COPY --from=frontend-builder /app/public ./static/public/
+
+# Cambiar permisos
+RUN chown -R app:app /app
+
+# Cambiar a usuario no-root
 USER app
 
-# Ensure Python packages are in PATH
-ENV PATH=/home/app/.local/bin:$PATH
+# Variables de entorno
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
+ENV HOST=0.0.0.0
 
-# Expose port
+# Exponer puerto
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
-CMD ["python", "run_server.py"]
+# Comando de inicio - usando main_simple
+CMD ["python", "-m", "uvicorn", "src.main_simple:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

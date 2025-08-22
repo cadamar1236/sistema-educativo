@@ -1,0 +1,93 @@
+name: Deploy Container App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  RESOURCE_GROUP: educational-system-rg
+  CONTAINER_APP: educational-api
+  CONTAINER_ENV: educational-env
+  ACR_NAME: eduacr9303
+  IMAGE_NAME: educational-app
+  DOCKERFILE: docker/Dockerfile.production
+  LOCATION: eastus
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure ACR
+        run: |
+          if ! az acr show -n $ACR_NAME -g $RESOURCE_GROUP >/dev/null 2>&1; then
+            az acr create -n $ACR_NAME -g $RESOURCE_GROUP -l $LOCATION --sku Basic --admin-enabled true
+          fi
+
+      - name: Build & Push Image
+        run: |
+          LOGIN_SERVER=$(az acr show -n $ACR_NAME -g $RESOURCE_GROUP --query loginServer -o tsv)
+          GIT_SHA=${{ github.sha }}
+          IMAGE_TAG=${GIT_SHA::7}
+          az acr build --registry $ACR_NAME --image $IMAGE_NAME:$IMAGE_TAG --image $IMAGE_NAME:latest -f $DOCKERFILE .
+          echo "login_server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        id: build
+
+      - name: Ensure Container Apps Env
+        run: |
+          if ! az containerapp env show -n $CONTAINER_ENV -g $RESOURCE_GROUP >/dev/null 2>&1; then
+            LAW_NAME="law-$CONTAINER_ENV"
+            if ! az monitor log-analytics workspace show -g $RESOURCE_GROUP -n $LAW_NAME >/dev/null 2>&1; then
+              az monitor log-analytics workspace create -g $RESOURCE_GROUP -n $LAW_NAME -l $LOCATION
+            fi
+            LAW_ID=$(az monitor log-analytics workspace show -g $RESOURCE_GROUP -n $LAW_NAME --query id -o tsv)
+            LAW_KEY=$(az monitor log-analytics workspace get-shared-keys -g $RESOURCE_GROUP -n $LAW_NAME --query primarySharedKey -o tsv)
+            az containerapp env create --name $CONTAINER_ENV --resource-group $RESOURCE_GROUP --location $LOCATION --logs-workspace-id $LAW_ID --logs-workspace-key $LAW_KEY
+          fi
+
+      - name: Prepare env vars
+        run: |
+          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> app_env.list
+          echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" >> app_env.list
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> app_env.list
+          echo "ENVIRONMENT=production" >> app_env.list
+          echo "WORKERS=4" >> app_env.list
+          echo "LOG_LEVEL=info" >> app_env.list
+
+      - name: Create/Update Container App
+        run: |
+          LOGIN_SERVER=$(az acr show -n $ACR_NAME -g $RESOURCE_GROUP --query loginServer -o tsv)
+          IMAGE_REF="$LOGIN_SERVER/$IMAGE_NAME:${{ steps.build.outputs.image_tag }}"
+          if az containerapp show -n $CONTAINER_APP -g $RESOURCE_GROUP >/dev/null 2>&1; then
+            az containerapp update -n $CONTAINER_APP -g $RESOURCE_GROUP --image $IMAGE_REF --env-vars $(tr '\n' ' ' < app_env.list)
+          else
+            az containerapp create \
+              --name $CONTAINER_APP \
+              --resource-group $RESOURCE_GROUP \
+              --environment $CONTAINER_ENV \
+              --image $IMAGE_REF \
+              --target-port 8000 \
+              --ingress external \
+              --cpu 1.0 --memory 2Gi \
+              --min-replicas 1 --max-replicas 3 \
+              --env-vars $(tr '\n' ' ' < app_env.list)
+          fi
+
+      - name: Output URL
+        run: |
+          URL=$(az containerapp show -n $CONTAINER_APP -g $RESOURCE_GROUP --query properties.configuration.ingress.fqdn -o tsv)
+          echo "App URL: https://$URL"

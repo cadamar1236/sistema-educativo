@@ -9,7 +9,7 @@ from datetime import datetime
 import asyncio
 
 class EnhancedEducationalAgent:
-    """Agente educativo mejorado con capacidades avanzadas"""
+    """Agdente educativo mejorado con capacidades avanzadas"""
     
     def __init__(self, agent_type: str = "enhanced", agent_name: str = "Enhanced Agent", config: Optional[Dict] = None):
         self.agent_type = agent_type
