@@ -1,35 +1,56 @@
-# Dockerfile simple y robusto para main_simple.py
+# Dockerfile corregido para el frontend con todos los fixes
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app
+
+# Copiar archivos de configuración
+COPY julia-frontend/package*.json ./
+COPY julia-frontend/next.config.js ./
+COPY julia-frontend/tailwind.config.ts ./
+COPY julia-frontend/tsconfig.json ./
+COPY julia-frontend/postcss.config.js ./
+
+# Instalar dependencias
+RUN npm ci --only=production
+
+# Copiar código fuente
+COPY julia-frontend/ ./
+
+# Build del frontend
+RUN npm run build
+
+# Stage final - Backend con frontend estático
 FROM python:3.11-slim
 
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     curl \
-    wget \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Crear usuario no-root
+# Crear usuario
 RUN useradd --create-home --shell /bin/bash app
 
 WORKDIR /app
 
-# Copiar requirements primero para aprovechar cache de Docker
-COPY requirements*.txt ./
-
 # Instalar dependencias Python
+COPY requirements*.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Crear directorios necesarios
+# Crear directorios
 RUN mkdir -p /app/data/uploads /app/data/temp /app/logs /app/static
 
-# Copiar código de la aplicación
+# Copiar código backend
 COPY . .
 
-# Cambiar permisos al usuario app
+# Copiar build del frontend
+COPY --from=frontend-builder /app/out ./static/
+COPY --from=frontend-builder /app/.next/static ./static/_next/static/
+
+# Cambiar permisos
 RUN chown -R app:app /app
 
-# Cambiar a usuario no-root
 USER app
 
 # Variables de entorno
@@ -39,12 +60,11 @@ ENV ENVIRONMENT=production
 ENV HOST=0.0.0.0
 ENV PORT=8000
 
-# Exponer puerto
 EXPOSE 8000
 
-# Health check simple
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Comando de inicio usando main_simple directamente
+# Comando de inicio
 CMD ["python", "-m", "uvicorn", "src.main_simple:app", "--host", "0.0.0.0", "--port", "8000"]

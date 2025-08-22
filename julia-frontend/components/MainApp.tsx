@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import ChatInterface from '../components/ChatInterface';
-import MultiAgentChat from '../components/MultiAgentChat';
-import AICoachEnhanced from '../components/AICoachEnhanced';
-import StudentDashboardAuthed from './student/StudentDashboardAuthed';
+import ChatInterface from './ChatInterface';
+import MultiAgentChat from './MultiAgentChat';
+import AICoachEnhanced from './AICoachEnhanced';
+import StudentDashboard from './student/StudentDashboard';
 
 const MainApp: React.FC = () => {
   const [activeView, setActiveView] = useState<'dashboard' | 'tutor' | 'multi' | 'coach'>('dashboard');
@@ -107,7 +107,7 @@ const MainApp: React.FC = () => {
 
         {/* Content Views */}
         <div className="transition-all duration-300 ease-in-out">
-          {activeView === 'dashboard' && <StudentDashboardAuthed />}
+          {activeView === 'dashboard' && <StudentDashboard />}
           {activeView === 'tutor' && <ChatInterface />}
           {activeView === 'multi' && <MultiAgentChat />}
           {activeView === 'coach' && <AICoachEnhanced />}

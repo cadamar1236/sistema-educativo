@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import ChatInterface from '../components/ChatInterface';
-import MultiAgentChat from '../components/MultiAgentChat';
-import { agentService } from '../lib/agentService';
+import ChatInterface from '../../components/ChatInterface';
+import MultiAgentChat from '../../components/MultiAgentChat';
+import { agentService } from '../../lib/agentService';
 
 const AgentChatDemo: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'single' | 'multi' | 'test'>('single');

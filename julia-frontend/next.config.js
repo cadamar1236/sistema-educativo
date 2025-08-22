@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
+  output: 'export',
+  trailingSlash: true,
   images: {
+    unoptimized: true,
     domains: ['images.unsplash.com', 'via.placeholder.com'],
   },
   env: {
@@ -13,15 +13,15 @@ const nextConfig = {
     return [
       {
         source: '/api/agents/:path*',
-        destination: 'http://127.0.0.1:8000/api/agents/:path*',
+        destination: '/api/agents/:path*',
       },
       {
         source: '/api/students/:path*',
-        destination: 'http://127.0.0.1:8000/api/students/:path*',
+        destination: '/api/students/:path*',
       },
       {
         source: '/api/system/:path*',
-        destination: 'http://127.0.0.1:8000/api/system/:path*',
+        destination: '/api/system/:path*',
       },
     ]
   },
