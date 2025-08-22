@@ -19,7 +19,6 @@ COPY julia-frontend/next.config.js ./
 COPY julia-frontend/tailwind.config.ts ./
 COPY julia-frontend/tsconfig.json ./
 COPY julia-frontend/postcss.config.js ./
-COPY julia-frontend/.eslintrc.json ./
 
 # Copiar todo el código del frontend
 COPY julia-frontend/ ./
