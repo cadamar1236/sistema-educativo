@@ -30,6 +30,7 @@ interface AgentResponse {
   agent_icon?: string;
   is_real_agent?: boolean;
   timestamp?: string;
+  guidance?: string;  // Añadido para CoachResponse compatibility
 }
 
 interface AgentResponseRendererProps {
@@ -138,18 +139,18 @@ const AgentResponseRenderer: React.FC<AgentResponseRendererProps> = ({ response 
     contentLength: content.length,
     contentPreview: content.substring(0, 200) + '...',
     hasMarkdown: content.includes('#') || content.includes('**') || content.includes('*'),
-    agent: agent.name || 'Sin nombre'
+    agent: (agent as any)?.name || 'Sin nombre'
   });
   
   return (
     <div className="agent-response-container bg-white rounded-lg p-6 shadow-lg border border-gray-200 mb-6">
       {/* Header del agente */}
       <div className="agent-header flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
-        <span className="agent-icon text-2xl">{agent.icon || response.agent_icon}</span>
+        <span className="agent-icon text-2xl">{(agent as any)?.icon || response.agent_icon}</span>
         <span className="agent-name font-semibold text-gray-800 text-lg">
-          {agent.name || response.agent_name}
+          {(agent as any)?.name || response.agent_name}
         </span>
-        {(agent.is_real || response.is_real_agent) && (
+        {((agent as any)?.is_real || response.is_real_agent) && (
           <span className="real-agent-badge bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
             🤖 Agente Real
           </span>
