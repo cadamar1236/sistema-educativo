@@ -47,6 +47,28 @@ aiofiles>=24.1.0
 python-dotenv>=1.0.0
 jinja2>=3.1.0
 
+# Autenticación y JWT
+PyJWT>=2.8.0
+cryptography>=41.0.0
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+httpx>=0.25.0
+
+# Base de datos adicionales
+asyncpg>=0.29.0
+aiosqlite>=0.19.0
+
+# Azure Services
+azure-search-documents>=11.4.0
+azure-core>=1.29.0
+
+# Pagos
+stripe>=7.0.0
+
+# Compatibilidad
+setuptools>=65.0.0
+wheel>=0.38.0
+
 # Logging y monitoreo
 loguru>=0.7.2
 
