@@ -36,6 +36,23 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
         if not base_redirect:
             if host and not host.startswith("localhost") and not host.startswith("127."):
                 base_redirect = f"{proto}://{host}/auth/callback"
+
+        # Si la variable de entorno apunta a /auth/google/callback, forzar simplificación a /auth/callback en producción
+        # para que exista página frontend que intercambie el código.
+        env_redirect = os.getenv("GOOGLE_REDIRECT_URI", "")
+        if (not base_redirect) and env_redirect and host and host in env_redirect:
+            # Extraer path de env y si termina en /auth/google/callback sustituirlo
+            try:
+                from urllib.parse import urlparse
+                p = urlparse(env_redirect)
+                if p.path.rstrip('/') == '/auth/google/callback':
+                    base_redirect = f"{proto}://{host}/auth/callback"
+            except Exception:
+                pass
+
+        # Si todavía no hay base_redirect usar env tal cual (último recurso)
+        if not base_redirect and env_redirect:
+            base_redirect = env_redirect
         # Normalizar: garantizar path /auth/callback
         if base_redirect and not base_redirect.endswith("/auth/callback"):
             if base_redirect.endswith('/'):
@@ -43,8 +60,9 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
             else:
                 base_redirect = base_redirect + '/auth/callback'
 
-        # Obtener URL de autorización con override si corresponde
-        auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
+    # Obtener URL de autorización con override si corresponde
+    auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
+    logger.info(f"Google login redirect_uri_used={base_redirect or google_auth.redirect_uri}")
         return {
             "auth_url": auth_url,
             "redirect_uri_used": base_redirect or google_auth.redirect_uri,
