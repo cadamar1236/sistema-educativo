@@ -55,12 +55,12 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
         raise HTTPException(status_code=500, detail="Error iniciando autenticación")
 
 @auth_router.get("/google/callback")
-async def google_callback(code: str = Query(...), state: Optional[str] = None):
+async def google_callback(code: str = Query(...), state: Optional[str] = None, redirect_uri: Optional[str] = Query(None)):
     """Callback de Google OAuth"""
     try:
         # Autenticar con Google y obtener token
-        auth_token = await google_auth.authenticate_with_google(code)
-        
+        auth_token = await google_auth.authenticate_with_google(code, redirect_override=redirect_uri)
+
         return {
             "success": True,
             "access_token": auth_token.access_token,
@@ -69,7 +69,7 @@ async def google_callback(code: str = Query(...), state: Optional[str] = None):
         }
     except Exception as e:
         logger.error(f"Error en callback de Google: {type(e).__name__}: {e}")
-        # Retornar mensaje genérico pero log interno es detallado
+        # Respuesta JSON clara (frontend espera JSON). Nunca HTML.
         raise HTTPException(status_code=400, detail="Error en autenticación con Google (callback)")
 
 @auth_router.get("/me")

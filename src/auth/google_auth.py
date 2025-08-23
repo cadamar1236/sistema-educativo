@@ -88,8 +88,9 @@ class GoogleAuthService:
         query_string = "&".join([f"{k}={v}" for k, v in params.items()])
         return f"{GOOGLE_AUTH_URL}?{query_string}"
     
-    async def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
-        """Intercambiar código de autorización por token"""
+    async def exchange_code_for_token(self, code: str, redirect_override: Optional[str] = None) -> Dict[str, Any]:
+        """Intercambiar código de autorización por token.
+        redirect_override permite usar el mismo override utilizado al generar la URL de autorización."""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 GOOGLE_TOKEN_URL,
@@ -97,7 +98,7 @@ class GoogleAuthService:
                     "code": code,
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
-                    "redirect_uri": self.redirect_uri,
+                    "redirect_uri": redirect_override or self.redirect_uri,
                     "grant_type": "authorization_code"
                 }
             )
@@ -170,10 +171,9 @@ class GoogleAuthService:
                 detail="Token inválido"
             )
     
-    async def authenticate_with_google(self, code: str) -> AuthToken:
+    async def authenticate_with_google(self, code: str, redirect_override: Optional[str] = None) -> AuthToken:
         """Proceso completo de autenticación con Google"""
-        # 1. Intercambiar código por token
-        token_data = await self.exchange_code_for_token(code)
+        token_data = await self.exchange_code_for_token(code, redirect_override=redirect_override)
         
         # 2. Obtener información del usuario
         google_user = await self.get_user_info(token_data["access_token"])
