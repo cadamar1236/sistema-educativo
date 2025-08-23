@@ -63,6 +63,7 @@ export default function LibraryStats({ stats, loading = false }: LibraryStatsPro
   const usageStats = stats?.usage_stats || {};
   const popularSearches = stats?.popular_searches || [];
   const popularTags = stats?.popular_tags || [];
+  const totalStorage = stats?.total_storage_used || (stats as any)?.total_storage || '0 MB';
 
   const subjectEntries = Object.entries(documentsBySubject);
   const topSubjects = subjectEntries
@@ -98,7 +99,7 @@ export default function LibraryStats({ stats, loading = false }: LibraryStatsPro
             <div className="flex items-center justify-center mb-2">
               <ChartBarIcon className="h-6 w-6 text-purple-600" />
             </div>
-            <div className="text-2xl font-bold text-purple-700">{stats?.total_storage || "0 MB"}</div>
+            <div className="text-2xl font-bold text-purple-700">{totalStorage}</div>
             <div className="text-sm text-purple-600">Almacenado</div>
           </CardBody>
         </Card>
@@ -168,7 +169,7 @@ export default function LibraryStats({ stats, loading = false }: LibraryStatsPro
               {recentUploads.map((upload, index) => (
                 <div key={index} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex-1">
-                    <p className="font-medium text-sm">{upload.name}</p>
+                    <p className="font-medium text-sm">{(upload as any).name || upload.title}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <Chip size="sm" variant="flat" color="primary">
                         {upload.subject}

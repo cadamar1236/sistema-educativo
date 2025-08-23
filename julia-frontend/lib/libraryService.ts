@@ -8,6 +8,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 export interface LibraryDocument {
   id: string;
   title: string;
+  // Algunos componentes usan 'name'; se mantiene opcional mapeando a title
+  name?: string;
+  // Campo opcional 'topic' usado en UI
+  topic?: string;
   subject: string;
   type: string;
   upload_date: string;
@@ -47,6 +51,10 @@ export interface SearchResults {
   query: string;
   documents: LibraryDocument[];
   total_results: number;
+  // Campos opcionales adicionales que puede devolver el backend
+  formatted_results?: string;
+  results?: string;
+  subject_filter?: string;
 }
 
 export interface UploadResponse {
@@ -64,6 +72,8 @@ export interface QuestionResponse {
   answer: string;
   subject?: string;
   timestamp: string;
+  // Campo opcional enriquecido
+  formatted_answer?: string;
 }
 
 export interface SearchParams {
@@ -109,7 +119,22 @@ class LibraryService {
         throw new Error(`Error fetching documents: ${response.statusText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      // Normalizar: asegurar que cada documento tenga 'name'
+      const normalizeDoc = (d: any) => ({
+        ...d,
+        name: d.name || d.title,
+        topic: d.topic || d.subject_topic || d.theme || undefined
+      });
+      if (Array.isArray(data.documents)) {
+        data.documents = data.documents.map(normalizeDoc);
+      }
+      if (data.documents_by_subject && typeof data.documents_by_subject === 'object') {
+        for (const key of Object.keys(data.documents_by_subject)) {
+          data.documents_by_subject[key] = (data.documents_by_subject[key] || []).map(normalizeDoc);
+        }
+      }
+      return data;
     } catch (error) {
       console.error('Error fetching documents:', error);
       throw error;

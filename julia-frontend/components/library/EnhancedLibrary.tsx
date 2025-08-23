@@ -414,11 +414,14 @@ export default function EnhancedLibrary() {
                   onSelectionChange={(keys) => setFilterCategory(Array.from(keys)[0] as string)}
                 >
                   <DropdownItem key="all">All Types</DropdownItem>
-                  {Object.entries(FILE_CATEGORIES).map(([key, config]) => (
-                    <DropdownItem key={key} startContent={<config.icon className="h-4 w-4" />}>
-                      {config.label}
-                    </DropdownItem>
-                  ))}
+                  <DropdownItem key="documents" startContent={<FileText className="h-4 w-4" />}>Documents</DropdownItem>
+                  <DropdownItem key="spreadsheets" startContent={<Grid className="h-4 w-4" />}>Spreadsheets</DropdownItem>
+                  <DropdownItem key="presentations" startContent={<FileText className="h-4 w-4" />}>Presentations</DropdownItem>
+                  <DropdownItem key="images" startContent={<Image className="h-4 w-4" />}>Images</DropdownItem>
+                  <DropdownItem key="videos" startContent={<Video className="h-4 w-4" />}>Videos</DropdownItem>
+                  <DropdownItem key="audio" startContent={<Music className="h-4 w-4" />}>Audio</DropdownItem>
+                  <DropdownItem key="archives" startContent={<Archive className="h-4 w-4" />}>Archives</DropdownItem>
+                  <DropdownItem key="code" startContent={<FileText className="h-4 w-4" />}>Code</DropdownItem>
                 </DropdownMenu>
               </Dropdown>
 
@@ -522,8 +525,7 @@ export default function EnhancedLibrary() {
                           size="sm"
                           variant="light"
                           color="danger"
-                          onPress={(e) => {
-                            e.stopPropagation();
+                          onPress={() => {
                             deleteDocument(doc.id);
                           }}
                         >

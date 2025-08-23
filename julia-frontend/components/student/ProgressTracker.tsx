@@ -87,13 +87,13 @@ export default function ProgressTracker({ studentData }: Props) {
           selectedKeys={[selectedSubject]}
           onSelectionChange={(keys) => setSelectedSubject(Array.from(keys)[0] as string)}
           className="w-48"
+          items={[{ key: 'all', label: 'Todas las Materias' }, ...subjects.map(s => ({ key: s.toLowerCase(), label: s }))]}
         >
-          <SelectItem key="all" value="all">Todas las Materias</SelectItem>
-          {subjects.map((subject) => (
-            <SelectItem key={subject.toLowerCase()} value={subject.toLowerCase()}>
-              {subject}
+          {(item: any) => (
+            <SelectItem key={item.key} value={item.key}>
+              {item.label}
             </SelectItem>
-          ))}
+          )}
         </Select>
       </div>
 

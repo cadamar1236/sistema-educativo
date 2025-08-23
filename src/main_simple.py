@@ -108,6 +108,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Endpoint de health simple para healthchecks de Docker / Azure
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 # Configurar archivos estáticos para el frontend
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")

@@ -200,10 +200,11 @@ const AgentResponseRenderer: React.FC<AgentResponseRendererProps> = ({ response 
             ),
             
             // Código inline y bloques con mejor contraste
-            code: ({inline, className, children, ...props}) => {
-              const match = /language-(\w+)/.exec(className || '');
-              const lang = match ? match[1] : '';
-              
+              code(codeProps: any) {
+                const { node, inline, className, children, ...props } = codeProps || {};
+                const match = /language-(\w+)/.exec(className || '');
+                const lang = match ? match[1] : '';
+                const content = String(children || '').replace(/\n$/, '');
               if (inline) {
                 return (
                   <code className="bg-gray-200 dark:bg-gray-700 text-red-600 dark:text-red-400 px-2 py-1 rounded text-sm font-mono">

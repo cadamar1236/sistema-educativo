@@ -200,8 +200,8 @@ export default function EducationalLibrary() {
                           {libraryService.getFileIcon(doc.type)}
                         </div>
                         <div className="flex-1">
-                          <h4 className="font-medium text-gray-900">{doc.name}</h4>
-                          <p className="text-sm text-gray-500 mt-1">{doc.topic}</p>
+                          <h4 className="font-medium text-gray-900">{(doc as any).name || (doc as any).title}</h4>
+                          <p className="text-sm text-gray-500 mt-1">{(doc as any).topic || ''}</p>
                           <div className="flex items-center gap-2 mt-2">
                             <Chip
                               size="sm"
@@ -235,7 +235,7 @@ export default function EducationalLibrary() {
    * Renderizar resultados de búsqueda
    */
   const renderSearchResults = () => {
-    if (!searchResults) return null;
+  if (!searchResults) return null;
 
     return (
       <Card>
@@ -257,7 +257,7 @@ export default function EducationalLibrary() {
           
           <div className="prose prose-sm max-w-none">
             <div dangerouslySetInnerHTML={{ 
-              __html: searchResults.formatted_results?.replace(/\n/g, '<br>') || searchResults.results 
+              __html: (searchResults.formatted_results?.replace(/\n/g, '<br>') || searchResults.results || '') as string 
             }} />
           </div>
         </CardBody>
@@ -291,7 +291,7 @@ export default function EducationalLibrary() {
           
           <div className="prose prose-sm max-w-none">
             <div dangerouslySetInnerHTML={{ 
-              __html: questionAnswer.formatted_answer?.replace(/\n/g, '<br>') || questionAnswer.answer 
+              __html: (((questionAnswer as any).formatted_answer as string | undefined)?.replace(/\n/g, '<br>') || questionAnswer.answer) 
             }} />
           </div>
         </CardBody>

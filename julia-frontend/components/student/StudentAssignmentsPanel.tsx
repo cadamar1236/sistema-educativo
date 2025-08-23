@@ -6,20 +6,20 @@ import { Send, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 
 export default function StudentAssignmentsPanel({ studentId }: { studentId?: string }) {
-  const { user, loading } = useAuth() as any
+  const { user, loading: authLoading } = useAuth() as any
   const effectiveStudentId = studentId || user?.id
   const [assignments, setAssignments] = useState<Assignment[]>([])
-  const [loading, setLoading] = useState(false)
+  const [localLoading, setLocalLoading] = useState(false)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
 
   const load = async () => {
-    setLoading(true)
+  setLocalLoading(true)
     try {
     if (!effectiveStudentId) return
     const data = await listStudentAssignments(effectiveStudentId)
       setAssignments(data.assignments || [])
-    } catch (e) { console.error(e) } finally { setLoading(false) }
+  } catch (e) { console.error(e) } finally { setLocalLoading(false) }
   }
 
   useEffect(() => { if (effectiveStudentId) load() }, [effectiveStudentId])
@@ -33,7 +33,7 @@ export default function StudentAssignmentsPanel({ studentId }: { studentId?: str
     } catch (e) { console.error(e) } finally { setSubmittingId(null) }
   }
 
-  if (loading || !effectiveStudentId) {
+  if (authLoading || localLoading || !effectiveStudentId) {
     return <Card><CardBody>Cargando tareas...</CardBody></Card>
   }
   return (
@@ -66,7 +66,7 @@ export default function StudentAssignmentsPanel({ studentId }: { studentId?: str
             </AccordionItem>
           ))}
         </Accordion>
-        {assignments.length === 0 && !loading && <p className="text-sm text-gray-500 mt-4">No hay tareas asignadas.</p>}
+  {assignments.length === 0 && !localLoading && <p className="text-sm text-gray-500 mt-4">No hay tareas asignadas.</p>}
       </CardBody>
     </Card>
   )

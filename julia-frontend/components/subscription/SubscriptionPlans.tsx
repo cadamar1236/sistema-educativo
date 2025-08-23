@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardBody, CardHeader, Button, Chip, Divider } from '@nextui-org/react';
-import { FaCheck, FaStar, FaCrown } from 'react-icons/fa';
+// Iconos inline para evitar dependencia react-icons
+const CheckIcon = () => (
+  <svg className="text-green-500 mt-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M13.485 1.929a1.2 1.2 0 0 1 0 1.697l-7.07 7.07a1.2 1.2 0 0 1-1.697 0L2.515 8.485a1.2 1.2 0 1 1 1.697-1.697l1.06 1.06 6.222-6.222a1.2 1.2 0 0 1 1.697 0Z"/></svg>
+);
+const StarIcon = () => (
+  <svg className="text-yellow-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"/></svg>
+);
+const CrownIcon = () => (
+  <svg className="text-purple-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" width="20" height="20" fill="currentColor"><path d="M528 448H112c-8.84 0-16-7.16-16-16v-48h448v48c0 8.84-7.16 16-16 16zm64-304c-35.35 0-64 28.65-64 64 0 7.08 1.21 13.86 3.32 20.24l-95.21 47.6c-11.27 5.63-24.86 1.06-30.49-10.21L320 160l-85.62 105.63c-5.63 11.27-19.22 15.84-30.49 10.21l-95.21-47.6A63.826 63.826 0 0 0 112 208c0-35.35-28.65-64-64-64S-16 172.65-16 208s28.65 64 64 64c2.18 0 4.33-.11 6.46-.32l110.66 55.37c29.71 14.86 65.59 2.86 80.45-26.85L320 243.2l74.43 57c14.86 29.71 50.74 41.71 80.45 26.85l110.66-55.37c2.13.21 4.28.32 6.46.32 35.35 0 64-28.65 64-64s-28.65-64-64-64z"/></svg>
+);
 
 interface Plan {
   tier: string;
@@ -70,9 +79,9 @@ export const SubscriptionPlans: React.FC = () => {
   const getIcon = (tier: string) => {
     switch (tier) {
       case 'pro':
-        return <FaStar className="text-yellow-500" />;
+        return <StarIcon />;
       case 'enterprise':
-        return <FaCrown className="text-purple-500" />;
+        return <CrownIcon />;
       default:
         return null;
     }
@@ -162,7 +171,7 @@ export const SubscriptionPlans: React.FC = () => {
               <ul className="space-y-3 mb-6">
                 {plan.features.map((feature, index) => (
                   <li key={index} className="flex items-start gap-2">
-                    <FaCheck className="text-green-500 mt-1 flex-shrink-0" />
+                    <CheckIcon />
                     <span className="text-sm">{feature}</span>
                   </li>
                 ))}

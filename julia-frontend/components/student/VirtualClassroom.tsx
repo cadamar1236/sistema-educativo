@@ -204,7 +204,7 @@ export default function VirtualClassroom({ studentData }: VirtualClassroomProps)
       </Card>
 
       {/* Navegación */}
-      <Tabs selectedKey={selectedTab} onSelectionChange={setSelectedTab}>
+  <Tabs selectedKey={selectedTab} onSelectionChange={(key) => setSelectedTab(String(key))}>
         <Tab 
           key="live" 
           title={

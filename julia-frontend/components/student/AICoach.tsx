@@ -407,7 +407,8 @@ Como tu **coach educativo personalizado**, he notado que prefieres el aprendizaj
                                 ),
                                 
                                 // Código inline y bloques
-                                code: ({inline, className, children, ...props}) => {
+                                code: (codeProps: any) => {
+                                  const { inline, className, children, ...props } = codeProps || {};
                                   const match = /language-(\w+)/.exec(className || '');
                                   const lang = match ? match[1] : '';
                                   

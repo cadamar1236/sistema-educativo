@@ -18,12 +18,20 @@ import type {
   UploadParams
 } from '@/lib/libraryService';
 
+interface SearchResultsState {
+  query: string;
+  subject_filter?: string;
+  formatted_results?: string;
+  results?: string;
+  documents: LibraryDocument[];
+}
+
 interface UseLibraryReturn {
   // Estado
   documents: LibraryDocument[];
   documentsBySubject: Record<string, LibraryDocument[]>;
   stats: LibraryStats | null;
-  searchResults: LibraryDocument[];
+  searchResults: SearchResultsState | null;
   questionAnswer: QuestionResponse | null;
   
   // Estados de carga
@@ -52,7 +60,7 @@ export function useLibrary(): UseLibraryReturn {
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const [documentsBySubject, setDocumentsBySubject] = useState<Record<string, LibraryDocument[]>>({});
   const [stats, setStats] = useState<LibraryStats | null>(null);
-  const [searchResults, setSearchResults] = useState<LibraryDocument[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResultsState | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<QuestionResponse | null>(null);
   
   // Estados de carga
@@ -151,8 +159,13 @@ export function useLibrary(): UseLibraryReturn {
       setError(null);
       
       const response = await libraryService.searchDocuments(params.query, params.subject);
-      setSearchResults(response.documents || []);
-      
+      setSearchResults({
+        query: response.query,
+        subject_filter: params.subject,
+        formatted_results: (response as any).formatted_results,
+        results: (response as any).results,
+        documents: response.documents || []
+      });
       return response;
     } catch (err) {
       handleError(err, 'Error en la búsqueda');
@@ -193,7 +206,7 @@ export function useLibrary(): UseLibraryReturn {
    * Limpiar resultados
    */
   const clearResults = useCallback(() => {
-    setSearchResults([]);
+  setSearchResults(null);
     setQuestionAnswer(null);
   }, []);
 
