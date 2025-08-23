@@ -84,13 +84,24 @@ except ImportError as e:
         print("🔄 Usando biblioteca simulada")
         REAL_LIBRARY_AVAILABLE = False
 
-# Importar routers de autenticación y suscripciones
+# Asegurar que el propio directorio src esté en el path para imports relativos directos
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+if SRC_DIR not in sys.path:
+    sys.path.append(SRC_DIR)
+
+# Importar routers de autenticación y suscripciones (forzar import relativo primero)
+_AUTH_ROUTERS_AVAILABLE = False
 try:
-    from api_auth_endpoints import auth_router, subscription_router
+    from .api_auth_endpoints import auth_router, subscription_router  # type: ignore
     _AUTH_ROUTERS_AVAILABLE = True
-except ImportError as _auth_e:
-    print(f"⚠️ No se pudieron importar routers de auth/subscription: {_auth_e}")
-    _AUTH_ROUTERS_AVAILABLE = False
+except Exception as _e_rel:
+    try:
+        from api_auth_endpoints import auth_router, subscription_router  # type: ignore
+        _AUTH_ROUTERS_AVAILABLE = True
+        print("ℹ️ Routers importados usando ruta absoluta de nivel superior")
+    except Exception as _e_abs:
+        print(f"⚠️ No se pudieron importar routers de auth/subscription (relativo: {_e_rel}; absoluto: {_e_abs})")
+        _AUTH_ROUTERS_AVAILABLE = False
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -120,6 +131,14 @@ if _AUTH_ROUTERS_AVAILABLE:
     app.include_router(auth_router)
     app.include_router(subscription_router)
     print("✅ Routers de autenticación y suscripciones registrados (/api/auth, /api/subscription)")
+    # Debug: listar rutas clave para confirmar que /api/auth/google/login existe
+    try:
+        auth_paths = [r.path for r in app.routes if r.path.startswith('/api/auth')]
+        print("🔎 Rutas auth registradas:", auth_paths)
+        if '/api/auth/google/login' not in auth_paths:
+            print("⚠️ Advertencia: /api/auth/google/login no aparece en el listado de rutas")
+    except Exception as _e_list:
+        print(f"⚠️ No se pudo listar rutas auth: {_e_list}")
 else:
     print("ℹ️ Routers de autenticación no disponibles; endpoints OAuth no expuestos")
 

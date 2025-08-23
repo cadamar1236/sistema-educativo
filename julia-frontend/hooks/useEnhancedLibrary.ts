@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { apiBase } from '../lib/runtimeApi';
 
 interface Document {
   id: string;
@@ -35,7 +36,7 @@ interface UseEnhancedLibraryReturn {
   supportedFormats: string[];
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = apiBase();
 
 export function useEnhancedLibrary(): UseEnhancedLibraryReturn {
   const [documents, setDocuments] = useState<Document[]>([]);

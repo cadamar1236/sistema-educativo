@@ -58,6 +58,8 @@ interface CoachResponse {
   };
 }
 
+import { apiBase } from '../lib/runtimeApi';
+
 class AgentService {
   private baseUrl: string;
 
@@ -250,8 +252,8 @@ class AgentService {
   }
 }
 
-// Crear instancia por defecto con la URL del backend FastAPI
-const agentService = new AgentService('http://localhost:8000');
+// Crear instancia por defecto con base dinámica (same-origin o NEXT_PUBLIC_API_URL)
+const agentService = new AgentService(apiBase());
 
 export { AgentService, agentService };
 export type { AgentResponse, MultiAgentResponse, CoachResponse };

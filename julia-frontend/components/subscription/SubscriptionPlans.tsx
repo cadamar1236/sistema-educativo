@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiBase } from '../../lib/runtimeApi';
 import { Card, CardBody, CardHeader, Button, Chip, Divider } from '@nextui-org/react';
 // Iconos inline para evitar dependencia react-icons
 const CheckIcon = () => (
@@ -32,7 +33,7 @@ export const SubscriptionPlans: React.FC = () => {
 
   const fetchPlans = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/subscription/plans`);
+  const response = await fetch(`${apiBase()}/api/subscription/plans`);
       const data = await response.json();
       
       // Marcar el plan PRO como recomendado
@@ -53,7 +54,7 @@ export const SubscriptionPlans: React.FC = () => {
     try {
       const token = localStorage.getItem('access_token');
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/subscription/checkout`, {
+  const response = await fetch(`${apiBase()}/api/subscription/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
