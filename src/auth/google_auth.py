@@ -64,21 +64,27 @@ class GoogleAuthService:
         if not self.client_id or not self.client_secret:
             logger.warning("⚠️ Google OAuth no configurado correctamente")
     
-    def get_authorization_url(self, state: str = None) -> str:
-        """Obtener URL de autorización de Google"""
+    def get_authorization_url(self, state: str = None, redirect_override: Optional[str] = None) -> str:
+        """Obtener URL de autorización de Google.
+        redirect_override permite forzar un redirect_uri dinámico (ej: dominio productivo) sin mutar estado global."""
         if not state:
             state = secrets.token_urlsafe(32)
-        
+
+        redirect_uri = redirect_override or self.redirect_uri
+        if redirect_override and redirect_override != self.redirect_uri:
+            # Log informativo para depurar diferencias de entorno
+            logger.info(f"🔄 Usando redirect_uri dinámico (override) {redirect_override} (base default: {self.redirect_uri})")
+
         params = {
             "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": "openid email profile",
             "access_type": "offline",
             "state": state,
             "prompt": "consent"
         }
-        
+
         query_string = "&".join([f"{k}={v}" for k, v in params.items()])
         return f"{GOOGLE_AUTH_URL}?{query_string}"
     

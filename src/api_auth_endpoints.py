@@ -25,12 +25,29 @@ subscription_router = APIRouter(prefix="/api/subscription", tags=["Subscriptions
 # ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
 @auth_router.get("/google/login")
-async def google_login(redirect_url: Optional[str] = None):
-    """Iniciar proceso de login con Google"""
+async def google_login(request: Request, redirect_url: Optional[str] = None):
+    """Iniciar proceso de login con Google.
+    Determina automáticamente el redirect_uri productivo basado en host si no se proporciona uno válido."""
     try:
-        auth_url = google_auth.get_authorization_url()
+        base_redirect = redirect_url
+        # Si no se pasa redirect_url y estamos fuera de localhost, construir usando host
+        host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+        proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+        if not base_redirect:
+            if host and not host.startswith("localhost") and not host.startswith("127."):
+                base_redirect = f"{proto}://{host}/auth/callback"
+        # Normalizar: garantizar path /auth/callback
+        if base_redirect and not base_redirect.endswith("/auth/callback"):
+            if base_redirect.endswith('/'):
+                base_redirect = base_redirect.rstrip('/') + '/auth/callback'
+            else:
+                base_redirect = base_redirect + '/auth/callback'
+
+        # Obtener URL de autorización con override si corresponde
+        auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
         return {
             "auth_url": auth_url,
+            "redirect_uri_used": base_redirect or google_auth.redirect_uri,
             "message": "Redirige al usuario a esta URL para autenticación"
         }
     except Exception as e:
