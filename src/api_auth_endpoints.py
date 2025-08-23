@@ -3,7 +3,7 @@ Endpoints de autenticación con Google y suscripciones con Stripe
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from typing import Dict, Any, Optional
 import logging
 import os
@@ -74,6 +74,36 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
         logger.error(f"Error iniciando login con Google: {e}")
         raise HTTPException(status_code=500, detail="Error iniciando autenticación")
 
+def _derive_effective_redirect(request: Request, redirect_uri: Optional[str]) -> Optional[str]:
+    """Derivar redirect_uri coherente con el host actual si no se pasó explícita."""
+    if redirect_uri:
+        return redirect_uri
+    host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    if not host:
+        return None
+    env_redirect = os.getenv("GOOGLE_REDIRECT_URI", "")
+    if env_redirect and host in env_redirect:
+        return env_redirect
+    if env_redirect:
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(env_redirect)
+            return f"{proto}://{host}{p.path}"
+        except Exception:
+            pass
+    return f"{proto}://{host}/auth/callback"
+
+def _normalize_redirect(r: Optional[str]) -> Optional[str]:
+    if not r:
+        return r
+    r = r.split('?')[0].split('#')[0]
+    if not r.rstrip('/').endswith('/auth/callback'):
+        if r.endswith('/'):
+            r = r.rstrip('/')
+        r = r + '/auth/callback'
+    return r
+
 @auth_router.get("/google/callback")
 async def google_callback(
     request: Request,
@@ -81,53 +111,82 @@ async def google_callback(
     state: Optional[str] = None,
     redirect_uri: Optional[str] = Query(None)
 ):
-    """Callback de Google OAuth.
-    Si no se proporciona redirect_uri explícito, intenta derivarlo dinámicamente del host para evitar
-    el error típico de "redirect_uri_mismatch" cuando en el login se usó un dominio productivo y
-    aquí se intenta intercambiar con el valor por defecto (localhost)."""
+    """Callback de Google OAuth que devuelve JSON y ahora también setea cookie del token.
+    El front debe guardar access_token (Authorization: Bearer) o usar la cookie."""
     try:
-        derived_redirect = None
-        if not redirect_uri:
-            host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
-            proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-            if host:
-                # Priorizar variable de entorno si existe (ya debería tener la ruta correcta)
-                env_redirect = os.getenv("GOOGLE_REDIRECT_URI", "")
-                if env_redirect and host in env_redirect:
-                    derived_redirect = env_redirect
-                else:
-                    # Soportar ambos posibles paths registrados: /auth/callback y /auth/google/callback
-                    # Escoger según lo que esté registrado en env si existe, si no /auth/callback por defecto.
-                    if env_redirect:
-                        # Reemplazar sólo el origen manteniendo path del env
-                        try:
-                            from urllib.parse import urlparse
-                            p = urlparse(env_redirect)
-                            derived_redirect = f"{proto}://{host}{p.path}"
-                        except Exception:
-                            derived_redirect = f"{proto}://{host}/auth/callback"
-                    else:
-                        derived_redirect = f"{proto}://{host}/auth/callback"
-        effective_redirect = redirect_uri or derived_redirect
-        if effective_redirect:
-            effective_redirect = effective_redirect.split('?')[0].split('#')[0]
-            if not effective_redirect.rstrip('/').endswith('/auth/callback'):
-                if effective_redirect.endswith('/'):
-                    effective_redirect = effective_redirect.rstrip('/')
-                effective_redirect = effective_redirect + '/auth/callback'
-
+        effective_redirect = _normalize_redirect(_derive_effective_redirect(request, redirect_uri))
         auth_token = await google_auth.authenticate_with_google(code, redirect_override=effective_redirect)
-
-        return {
+        payload = {
             "success": True,
             "access_token": auth_token.access_token,
             "user": auth_token.user,
             "message": "Autenticación exitosa",
             "redirect_uri_used": effective_redirect or google_auth.redirect_uri
         }
+        # Construir respuesta y añadir cookie (no HttpOnly para que frontend pueda migrar si esperaba cookie)
+        from datetime import timedelta
+        resp = JSONResponse(payload)
+        # SECURE: en producción (https) secure=True
+        secure_flag = (request.url.scheme == 'https') or (request.headers.get('x-forwarded-proto') == 'https')
+        resp.set_cookie(
+            key="access_token",
+            value=auth_token.access_token,
+            max_age=int(timedelta(hours=24).total_seconds()),
+            httponly=False,  # si quieres reforzar cambia a True y haz fetch con Authorization header
+            secure=secure_flag,
+            samesite="Lax",
+            path="/"
+        )
+        return resp
     except Exception as e:
         logger.error(f"Error en callback de Google: {type(e).__name__}: {e}")
         raise HTTPException(status_code=400, detail="Error en autenticación con Google (callback)")
+
+@auth_router.get("/google/callback/redirect")
+async def google_callback_redirect(
+    request: Request,
+    code: str = Query(...),
+    state: Optional[str] = None,
+    redirect_uri: Optional[str] = Query(None),
+    next: str = Query("/dashboard")
+):
+    """Variante que devuelve HTML + JS: guarda token en localStorage y redirige a `next`.
+    Útil para flujos donde solo se puede configurar redirect_uri hacia un endpoint backend.
+    Uso: registra esta ruta en Google Console y añade ?next=%2Fdashboard (o la ruta deseada)."""
+    try:
+        effective_redirect = _normalize_redirect(_derive_effective_redirect(request, redirect_uri))
+        auth_token = await google_auth.authenticate_with_google(code, redirect_override=effective_redirect)
+        # Sanitizar next (solo rutas internas)
+        if not next.startswith('/'):
+            next = '/'
+        html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Autenticando...</title></head>
+<body><script>
+try {{
+  const token = {auth_token.access_token!r};
+  localStorage.setItem('access_token', token);
+  sessionStorage.setItem('access_token', token);
+  document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
+  window.location.replace({next!r});
+}} catch(e) {{
+  document.body.innerHTML = '<pre>Error almacenando token: ' + e + '</pre>';
+}}
+</script><p>Redirigiendo...</p></body></html>"""
+        secure_flag = (request.url.scheme == 'https') or (request.headers.get('x-forwarded-proto') == 'https')
+        resp = HTMLResponse(html)
+        from datetime import timedelta
+        resp.set_cookie(
+            key="access_token",
+            value=auth_token.access_token,
+            max_age=int(timedelta(hours=24).total_seconds()),
+            httponly=False,
+            secure=secure_flag,
+            samesite="Lax",
+            path="/"
+        )
+        return resp
+    except Exception as e:
+        logger.error(f"Error en callback redirect Google: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=400, detail="Error en autenticación con Google (redirect)")
 
 @auth_router.get("/me")
 async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_current_user)):
