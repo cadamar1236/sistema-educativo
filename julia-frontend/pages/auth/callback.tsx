@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { Card, Spinner } from '@nextui-org/react';
 import { useAuth } from '@/hooks/useAuth';
+import { apiBase } from '../../lib/runtimeApi';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function AuthCallback() {
       try {
         // Enviar código al backend para obtener token
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/google/callback?code=${code}`,
+          `${apiBase()}/api/auth/google/callback?code=${code}`,
           { method: 'GET' }
         );
 

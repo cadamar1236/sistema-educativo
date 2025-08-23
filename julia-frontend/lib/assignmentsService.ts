@@ -1,4 +1,5 @@
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api').replace(/\/$/, '')
+import { apiBase } from './runtimeApi'
+const API_BASE = (apiBase() + '/api').replace(/\/$/, '')
 
 export interface Assignment {
   id: string

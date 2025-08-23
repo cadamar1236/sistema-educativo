@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { apiBase } from '../lib/runtimeApi'
 import { NextUIProvider } from '@nextui-org/react'
 import { ThemeProvider as NextThemesProvider } from 'next-themes'
 
@@ -32,7 +33,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
       if (!token) { setUser(null); setLoading(false); return }
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+  const res = await fetch(`${apiBase()}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       if (res.ok) {
         const data = await res.json(); setUser(data.user); setError(null)
       } else { localStorage.removeItem('access_token'); setUser(null) }
@@ -49,7 +50,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-      if (token) { await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }) }
+  if (token) { await fetch(`${apiBase()}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }) }
     } catch {}
     finally { localStorage.removeItem('access_token'); setUser(null) }
   }, [])
@@ -58,7 +59,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
       if (!token) return
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+  const res = await fetch(`${apiBase()}/api/auth/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
       if (res.ok) { const data = await res.json(); localStorage.setItem('access_token', data.access_token); await checkAuth() }
       else { localStorage.removeItem('access_token'); setUser(null) }
     } catch {}

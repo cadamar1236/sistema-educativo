@@ -1,7 +1,8 @@
 import axios, { AxiosRequestConfig } from 'axios';
 
 // Configuración base para conectar con el backend de Julia
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+import { apiBase } from './runtimeApi';
+const API_BASE_URL = apiBase() + '/api';
 
 // Cliente HTTP configurado (se le podrán inyectar headers dinámicos)
 const apiClient = axios.create({

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { apiBase } from '../../lib/runtimeApi'
 import { useAuth } from '@/hooks/useAuth'
 import { Card, CardBody, CardHeader, Progress, Chip, Button, Select, SelectItem, Tabs, Tab } from '@nextui-org/react'
 import { TrendingUp, Award, Clock, Target, BookOpen, Brain, Calendar, BarChart3, PieChart, LineChart } from 'lucide-react'
@@ -9,7 +10,7 @@ import { useJuliaAgents } from '@/lib/juliaAgentService'
 
 // Añadir helper de fetch
 async function fetchProgress(studentName: string, period: string) {
-  const rawBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+  const rawBase = (apiBase() + '/api')
   const base = rawBase.replace(/\/$/, '')
   const pathApi = `${base}/students/${encodeURIComponent(studentName)}/progress?period=${period}`
   let res = await fetch(pathApi)

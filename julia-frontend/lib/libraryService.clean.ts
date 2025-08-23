@@ -3,7 +3,8 @@
  * Maneja documentos, búsquedas y consultas RAG
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { apiBase } from './runtimeApi';
+const API_BASE = apiBase();
 
 export interface LibraryDocument {
   id: string;

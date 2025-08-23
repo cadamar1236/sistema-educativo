@@ -1,5 +1,6 @@
 'use client';
 import React, { useState } from 'react';
+import { apiBase } from '../../lib/runtimeApi';
 import { Button, Card } from '@nextui-org/react';
 import { useRouter } from 'next/navigation';
 
@@ -13,7 +14,7 @@ export default function LoginPage() {
       setLoading(true);
       setError(null);
       // call backend to get Google auth URL
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/google/login`);
+  const res = await fetch(`${apiBase()}/api/auth/google/login`);
       if (!res.ok) throw new Error('No se pudo iniciar autenticación');
       const data = await res.json();
       if (data.auth_url) {

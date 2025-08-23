@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiBase } from '../lib/runtimeApi';
 import { useRouter } from 'next/router';
 
 interface User {
@@ -35,7 +36,7 @@ export const useAuth = () => {
         setAuthState({ user: null, loading: false, error: null });
         return;
       }
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/me`, {
+  const response = await fetch(`${apiBase()}/api/auth/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -59,7 +60,7 @@ export const useAuth = () => {
     try {
       const token = localStorage.getItem('access_token');
       if (token) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/logout`, {
+  await fetch(`${apiBase()}/api/auth/logout`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -76,7 +77,7 @@ export const useAuth = () => {
     try {
       const token = localStorage.getItem('access_token');
       if (!token) throw new Error('No hay token para refrescar');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/refresh`, {
+  const response = await fetch(`${apiBase()}/api/auth/refresh`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });

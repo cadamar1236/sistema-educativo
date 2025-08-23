@@ -1,4 +1,5 @@
 import React from 'react';
+import { apiBase } from '../../lib/runtimeApi';
 import { Button } from '@nextui-org/react';
 
 // Icono de Google inline (evita dependencia de react-icons)
@@ -28,7 +29,7 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
   const handleGoogleLogin = async () => {
     try {
       // Obtener URL de autenticación del backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/google/login`);
+  const response = await fetch(`${apiBase()}/api/auth/google/login`);
       const data = await response.json();
       
       if (data.auth_url) {
