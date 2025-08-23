@@ -29,8 +29,8 @@ COPY julia-frontend/ ./
 ARG NEXT_PUBLIC_API_URL=/
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NODE_ENV=production
-# Build (generates .next) y export estático (genera /frontend/out)
-RUN npm run build && npx next export
+# Build: con output:'export' en next.config.js, 'npm run build' genera directamente 'out/'
+RUN npm run build
 
 # Stage 2: Backend Python con Frontend estático
 FROM python:3.11-slim AS production
