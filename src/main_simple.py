@@ -116,6 +116,10 @@ async def health():
 # Configurar archivos estáticos para el frontend
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
+    # Para build export de Next.js los bundles viven en static/_next
+    if os.path.exists("static/_next"):
+        app.mount("/_next", StaticFiles(directory="static/_next"), name="_next")
+        print("✅ Bundles de Next.js servidos en /_next")
     print("✅ Archivos estáticos del frontend configurados en /static")
 
 # Ruta para servir la aplicación React/Next.js

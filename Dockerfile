@@ -80,6 +80,7 @@ COPY alembic/ ./alembic/
 # Copiar sitio estático exportado (Next.js output export genera /frontend/out)
 # y además conservar el código fuente del frontend dentro de /app/frontend-src (opcional para debug)
 COPY --from=frontend-builder /frontend/out/ ./static/
+# Asegurar que la carpeta _next permanezca en nivel static/_next para servir en /_next
 COPY --from=frontend-builder /frontend/ ./frontend-src/
 
 # (Opcional) Si se cambiara a modo no-export, se podría copiar sólo los assets:
