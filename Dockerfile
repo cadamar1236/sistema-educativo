@@ -85,12 +85,15 @@ COPY alembic/ ./alembic/
 COPY --from=frontend-builder /frontend/out/ ./static/
 RUN mkdir -p /usr/share/nginx/html && cp -R ./static/* /usr/share/nginx/html/
 
-# Copiar configs de Nginx y Supervisor (si existen del repo) o crear fallback mínimos
-COPY nginx/fullstack.conf /etc/nginx/conf.d/default.conf
+# Copiar configs de Nginx y Supervisor (renombramos para no chocar con default)
+COPY nginx/fullstack.conf /etc/nginx/conf.d/app.conf
 COPY supervisord.single.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Fallback simple si no se copiaron (evitar fallo build) - crea index de placeholder
-RUN [ -f /etc/nginx/conf.d/default.conf ] || echo 'server { listen 80; root /usr/share/nginx/html; location /api/ { proxy_pass http://127.0.0.1:8001/; } }' > /etc/nginx/conf.d/default.conf
+# Eliminar sitio por defecto de Debian/NGINX que muestra "Welcome to nginx" y cualquier index heredado
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf /usr/share/nginx/html/index.nginx-debian.html || true
+
+# Fallback simple si no se copiaron (evitar fallo build)
+RUN [ -f /etc/nginx/conf.d/app.conf ] || echo 'server { listen 80 default_server; root /usr/share/nginx/html; location /api/ { proxy_pass http://127.0.0.1:8001/; } location / { try_files $uri $uri/ /index.html; } }' > /etc/nginx/conf.d/app.conf
 
 # (Opcional) Si se cambiara a modo no-export, se podría copiar sólo los assets:
 # COPY --from=frontend-builder /frontend/.next/static ./static/_next/static/
