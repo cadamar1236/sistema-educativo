@@ -108,60 +108,66 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+"""Eliminado middleware de debug de chunks para simplificar el servidor."""
+
 # Endpoint de health simple para healthchecks de Docker / Azure
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
-# Configurar archivos estáticos para el frontend
-if os.path.exists("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-    # Para build export de Next.js los bundles viven en static/_next
-    if os.path.exists("static/_next"):
-        app.mount("/_next", StaticFiles(directory="static/_next"), name="_next")
-        print("✅ Bundles de Next.js servidos en /_next")
-    print("✅ Archivos estáticos del frontend configurados en /static")
-
-# Ruta para servir la aplicación React/Next.js
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
-    """Servir la aplicación frontend"""
-    static_path = "static/index.html"
-    if os.path.exists(static_path):
-        return FileResponse(static_path)
-    else:
-        return HTMLResponse("""
-        <html>
-            <body>
-                <h1>🎓 Sistema Educativo Multiagente</h1>
-                <p>Backend API funcionando correctamente</p>
-                <p><a href="/docs">Ver documentación de la API</a></p>
-            </body>
-        </html>
-        """)
-
-# Ruta catch-all para SPA routing
-@app.get("/{path_name:path}", response_class=HTMLResponse)
-async def catch_all(path_name: str):
-    """Manejar rutas del SPA que no son de la API"""
-    # Si es una ruta de API, no interceptar
-    if path_name.startswith("api/") or path_name.startswith("docs") or path_name.startswith("openapi.json"):
-        raise HTTPException(status_code=404, detail="API endpoint not found")
-    
-    # Para todas las demás rutas, servir el index.html (SPA routing)
-    static_path = "static/index.html"
-    if os.path.exists(static_path):
-        return FileResponse(static_path)
-    else:
-        raise HTTPException(status_code=404, detail="Frontend not found")
-
-# Registrar routers de auth si están disponibles
+# Registrar routers de auth si están disponibles (ANTES del catch-all)
 if _AUTH_ROUTERS_AVAILABLE:
     app.include_router(auth_router)
     app.include_router(subscription_router)
     print("✅ Routers de autenticación y suscripciones registrados (/api/auth, /api/subscription)")
 else:
     print("ℹ️ Routers de autenticación no disponibles; endpoints OAuth no expuestos")
+
+########## SERVING FRONTEND EXPORT (SIMPLIFICADO) ##########
+FRONTEND_EXPORT_DIR = "static"  # Directorio donde copiamos el 'out' de Next.js
+NEXT_ASSETS_DIR = os.path.join(FRONTEND_EXPORT_DIR, "_next")
+
+if os.path.isdir(FRONTEND_EXPORT_DIR):
+    # Montar bundles Next.js (importante que se monte antes de rutas catch-all)
+    if os.path.isdir(NEXT_ASSETS_DIR):
+        app.mount("/_next", StaticFiles(directory=NEXT_ASSETS_DIR), name="_next")
+        print("✅ (/ _next) bundles Next.js montados")
+    # Montar también /static para assets no versionados (imágenes, etc.)
+    app.mount("/static", StaticFiles(directory=FRONTEND_EXPORT_DIR), name="static")
+    print("✅ (/static) directorio export montado")
+else:
+    print("⚠️ No existe el directorio 'static' con el export del frontend. Ejecuta build/export de Next.js.")
+
+########## FIN DEBUG AVANZADO (REMOVIDO) ##########
+
+# Favicon específico
+@app.get("/favicon.ico")
+async def favicon():
+    favicon_path = "static/favicon.ico"
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path)
+    else:
+        raise HTTPException(status_code=404, detail="Favicon not found")
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_root():
+    index_path = os.path.join(FRONTEND_EXPORT_DIR, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
+    return HTMLResponse("<h1>Frontend no exportado</h1><p>Ejecuta 'npm run build && npx next export' y copia 'out' a 'static'.</p>")
+
+# Catch-all SPA (DESPUÉS de mounts y rutas API) — sirve index.html para rutas de aplicación
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def spa_catch_all(full_path: str):
+    # No interferir con rutas API ni assets
+    if full_path.startswith(("api/", "_next/", "static/")) or full_path in ("favicon.ico", "robots.txt"):
+        raise HTTPException(status_code=404)
+    index_path = os.path.join(FRONTEND_EXPORT_DIR, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="Frontend no disponible")
+
+# NO usar catch-all que interfiere con mounts estáticos
 
 # === FUNCIONES AUXILIARES PARA TRACKING ===
 
@@ -213,6 +219,29 @@ async def track_requests(request, call_next):
     
     # Procesar request
     response = await call_next(request)
+
+    # DEBUG: Verificar archivos estáticos de Next.js que provocan "Unexpected token '<'"
+    try:
+        path = request.url.path  # e.g. /_next/static/chunks/webpack-xxx.js
+        if path.startswith("/_next/"):
+            # Traducir a ruta de archivo en disco
+            relative = path[len("/_next/"):]  # static/chunks/...
+            disk_path = os.path.join("static", "_next", relative.replace("/", os.sep))
+            exists = os.path.exists(disk_path)
+            size = os.path.getsize(disk_path) if exists else -1
+            # Añadir cabeceras de depuración
+            response.headers["X-Debug-Static-File"] = disk_path
+            response.headers["X-Debug-Static-Exists"] = str(exists)
+            response.headers["X-Debug-Static-Size"] = str(size)
+            if not exists:
+                print(f"[STATIC DEBUG] NO EXISTE archivo pedido: {disk_path}")
+            else:
+                if size < 40:
+                    with open(disk_path, 'rb') as fdbg:
+                        head = fdbg.read(60)
+                    print(f"[STATIC DEBUG] Sirviendo {disk_path} bytes={size} inicio={head[:30]!r}")
+    except Exception as _dbg_e:
+        print(f"[STATIC DEBUG] Error debug estático: {_dbg_e}")
     
     # Si es un endpoint de agentes, registrar automáticamente
     if "/api/agents/" in str(request.url) and request.method == "POST":
@@ -619,19 +648,24 @@ class RealAgentManager:
 # Instanciar el manager de agentes
 agent_manager = RealAgentManager()
 
-@app.get("/")
-async def root():
-    """Endpoint raíz"""
+# NOTA: La ruta "/" ya está definida arriba para servir el frontend/export.
+# Para la información de API usamos ahora "/api" para evitar conflictos que rompen el reload.
+@app.get("/api")
+async def api_root():
+    """Información básica de la API sin interferir con el frontend exportado"""
     return {
-        "message": "Sistema Educativo Multiagente",
+        "message": "Sistema Educativo Multiagente API",
         "version": "1.0.0",
         "status": "active",
-        "agents": list(AVAILABLE_AGENTS.keys())
+        "agents": list(AVAILABLE_AGENTS.keys()),
+        "docs": "/docs",
+        "openapi": "/openapi.json"
     }
 
-@app.get("/health")
-async def health_check():
-    """Verificación de salud del sistema"""
+# Salud extendida (mantener /health simple ya definido arriba)
+@app.get("/health/full")
+async def health_check_full():
+    """Verificación de salud extendida del sistema"""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),

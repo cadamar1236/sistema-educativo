@@ -26,11 +26,11 @@ COPY julia-frontend/postcss.config.js ./
 # Copiar todo el código del frontend
 COPY julia-frontend/ ./
 
-# Build del frontend para producción
 ARG NEXT_PUBLIC_API_URL=/
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NODE_ENV=production
-RUN npm run build
+# Build (generates .next) y export estático (genera /frontend/out)
+RUN npm run build && npx next export
 
 # Stage 2: Backend Python con Frontend estático
 FROM python:3.11-slim AS production
@@ -41,12 +41,16 @@ ENV PYTHONPATH=/app
 ENV ENVIRONMENT=production
 
 # Instalar dependencias del sistema
-RUN apt-get update && apt-get install -y \
+# Añadimos nginx y supervisor para servir frontend + proxy API
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     gcc \
     g++ \
     build-essential \
+    nginx \
+    supervisor \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear usuario no-root para seguridad
@@ -77,11 +81,16 @@ COPY *.py ./
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
-# Copiar sitio estático exportado (Next.js output export genera /frontend/out)
-# y además conservar el código fuente del frontend dentro de /app/frontend-src (opcional para debug)
+# Copiar sitio estático exportado (lo necesita FastAPI y también lo servirá Nginx)
 COPY --from=frontend-builder /frontend/out/ ./static/
-# Asegurar que la carpeta _next permanezca en nivel static/_next para servir en /_next
-COPY --from=frontend-builder /frontend/ ./frontend-src/
+RUN mkdir -p /usr/share/nginx/html && cp -R ./static/* /usr/share/nginx/html/
+
+# Copiar configs de Nginx y Supervisor (si existen del repo) o crear fallback mínimos
+COPY nginx/fullstack.conf /etc/nginx/conf.d/default.conf
+COPY supervisord.single.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Fallback simple si no se copiaron (evitar fallo build) - crea index de placeholder
+RUN [ -f /etc/nginx/conf.d/default.conf ] || echo 'server { listen 80; root /usr/share/nginx/html; location /api/ { proxy_pass http://127.0.0.1:8001/; } }' > /etc/nginx/conf.d/default.conf
 
 # (Opcional) Si se cambiara a modo no-export, se podría copiar sólo los assets:
 # COPY --from=frontend-builder /frontend/.next/static ./static/_next/static/
@@ -93,8 +102,9 @@ RUN [ -f /app/static/index.html ] || echo '<!DOCTYPE html><html><head><title>Sis
 # Cambiar permisos al usuario app
 RUN chown -R app:app /app
 
-# Cambiar a usuario no-root
-USER app
+# Dejamos root para que Nginx pueda bindear al puerto 80 (simple). 
+# (Mejora futura: usar setcap o puerto >1024 y volver a usuario app)
+USER root
 
 # Variables de entorno para la aplicación
 ENV HOST=0.0.0.0
@@ -102,13 +112,16 @@ ENV PORT=8000
 ENV WORKERS=1
 ENV RELOAD=false
 
-# Exponer puerto
-EXPOSE 8000
+# Exponer puerto HTTP servido por Nginx
+EXPOSE 80
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Health check a través de Nginx (proxy a FastAPI)
+HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
 
-# Comando de inicio usando main_simple.py
-CMD ["python", "-m", "uvicorn", "src.main_simple:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Archivo supervisor: ejecuta uvicorn en 8001 y nginx en 80
+# Si no existe (fallback), lo generamos rápido
+RUN grep -q '\[program:api\]' /etc/supervisor/conf.d/supervisord.conf || echo "[supervisord]\nnodaemon=true\n[program:api]\ncommand=python -m uvicorn src.main_simple:app --host 127.0.0.1 --port 8001 --workers 1\n[program:nginx]\ncommand=/usr/sbin/nginx -g 'daemon off;'" > /etc/supervisor/conf.d/supervisord.conf
+
+CMD ["/usr/bin/supervisord","-n"]
 
