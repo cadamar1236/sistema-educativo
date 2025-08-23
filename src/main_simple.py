@@ -144,6 +144,36 @@ app.add_middleware(
 async def health():
     return {"status": "ok"}
 
+# Debug: listar rutas y config OAuth (no exponer secretos)
+@app.get("/debug/routes")
+def debug_routes():
+    return {
+        "count": len(app.routes),
+        "paths": [r.path for r in app.routes if hasattr(r, 'path')]
+    }
+
+@app.get("/debug/authinfo")
+def debug_authinfo():
+    info = {}
+    try:
+        try:
+            from src.auth.google_auth import google_auth as _ga  # type: ignore
+        except Exception:
+            from auth.google_auth import google_auth as _ga  # type: ignore
+        info["google_redirect_uri_instance"] = getattr(_ga, 'redirect_uri', None)
+    except Exception as e:
+        info["google_auth_import_error"] = repr(e)
+    # Env (enmascarar client secret)
+    info["env_GOOGLE_REDIRECT_URI"] = os.getenv("GOOGLE_REDIRECT_URI")
+    cid = os.getenv("GOOGLE_CLIENT_ID", "")
+    info["env_GOOGLE_CLIENT_ID_suffix"] = cid[-12:] if len(cid) > 12 else cid
+    info["has_GOOGLE_CLIENT_SECRET"] = bool(os.getenv("GOOGLE_CLIENT_SECRET"))
+    # Confirmar ruta login registrada
+    auth_paths = [r.path for r in app.routes if r.path.startswith('/api/auth/')]
+    info["auth_paths"] = auth_paths
+    info["login_route_present"] = '/api/auth/google/login' in auth_paths
+    return info
+
 # Registrar routers de auth si están disponibles (ANTES del catch-all)
 if _AUTH_ROUTERS_AVAILABLE:
     try:

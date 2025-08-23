@@ -53,12 +53,14 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
         # Si todavía no hay base_redirect usar env tal cual (último recurso)
         if not base_redirect and env_redirect:
             base_redirect = env_redirect
-        # Normalizar: garantizar path /auth/callback
-        if base_redirect and not base_redirect.endswith("/auth/callback"):
-            if base_redirect.endswith('/'):
-                base_redirect = base_redirect.rstrip('/') + '/auth/callback'
-            else:
+        # Normalizar: garantizar que termina en /auth/callback o /auth/callback/
+        if base_redirect:
+            base_redirect = base_redirect.split('?')[0].split('#')[0]
+            if not (base_redirect.rstrip('/').endswith('/auth/callback')):
+                if base_redirect.endswith('/'):
+                    base_redirect = base_redirect.rstrip('/')
                 base_redirect = base_redirect + '/auth/callback'
+            # No forzar barra final; Google puede tener registrado sin ella
 
         # Obtener URL de autorización con override si corresponde
         auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
@@ -107,6 +109,12 @@ async def google_callback(
                     else:
                         derived_redirect = f"{proto}://{host}/auth/callback"
         effective_redirect = redirect_uri or derived_redirect
+        if effective_redirect:
+            effective_redirect = effective_redirect.split('?')[0].split('#')[0]
+            if not effective_redirect.rstrip('/').endswith('/auth/callback'):
+                if effective_redirect.endswith('/'):
+                    effective_redirect = effective_redirect.rstrip('/')
+                effective_redirect = effective_redirect + '/auth/callback'
 
         auth_token = await google_auth.authenticate_with_google(code, redirect_override=effective_redirect)
 
