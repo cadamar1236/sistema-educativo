@@ -36,8 +36,21 @@ export default function AuthCallback() {
           // Guardar token y usuario
           await login(data.access_token, data.user);
           
-          // Redirigir al dashboard o a la página anterior
-          const redirectTo = localStorage.getItem('auth_redirect') || '/dashboard';
+          // Determinar destino final
+          const stored = localStorage.getItem('auth_redirect');
+          let redirectTo = stored;
+          if (!redirectTo) {
+            // Elegir dashboard según rol
+            redirectTo = data.user?.role === 'teacher' ? '/dashboard/teacher' : '/dashboard';
+          } else {
+            // Si hay conflicto rol vs destino (ej: teacher y redirect genérico), ajustar
+            if (data.user?.role === 'teacher' && redirectTo === '/dashboard') {
+              redirectTo = '/dashboard/teacher';
+            }
+            if (data.user?.role !== 'teacher' && redirectTo === '/dashboard/teacher') {
+              redirectTo = '/dashboard';
+            }
+          }
           localStorage.removeItem('auth_redirect');
           router.push(redirectTo);
         } else {

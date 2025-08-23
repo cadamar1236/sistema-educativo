@@ -15,7 +15,12 @@ export default function DashboardPage() {
 	}, [user, router]);
 
 	if (loading) return <div className="p-8">Cargando aplicación...</div>;
-	if (!user) return <div className="p-8">No autenticado.</div>;
+	if (!user) {
+		if (typeof window !== 'undefined') {
+			try { localStorage.setItem('auth_redirect', '/dashboard'); } catch {}
+		}
+		return <div className="p-8">No autenticado.</div>;
+	}
 	if (user.role === 'teacher') return null; // redirigiendo
 
 		return <StudentDashboard />;

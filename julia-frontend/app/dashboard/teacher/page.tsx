@@ -12,6 +12,9 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     if (!loading) {
       if (!user) {
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('auth_redirect', '/dashboard/teacher'); } catch {}
+        }
         router.push('/login')
       } else if (role !== 'teacher') {
         router.push('/dashboard')

@@ -2,12 +2,14 @@
 import React, { useState } from 'react';
 import { apiBase } from '../../lib/runtimeApi';
 import { Button, Card } from '@nextui-org/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const nextParam = searchParams?.get('next');
 
   const startGoogle = async () => {
     try {
@@ -18,9 +20,10 @@ export default function LoginPage() {
       if (!res.ok) throw new Error('No se pudo iniciar autenticación');
       const data = await res.json();
       if (data.auth_url) {
-        // store redirect target if needed
+        // Determine desired redirect (prioritize explicit next= param, else keep existing stored value, else dashboard)
         if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_redirect', '/dashboard');
+          const desired = nextParam && nextParam.startsWith('/') ? nextParam : (localStorage.getItem('auth_redirect') || '/dashboard');
+          localStorage.setItem('auth_redirect', desired);
         }
         window.location.href = data.auth_url;
       } else {

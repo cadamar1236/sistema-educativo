@@ -55,21 +55,52 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
         raise HTTPException(status_code=500, detail="Error iniciando autenticación")
 
 @auth_router.get("/google/callback")
-async def google_callback(code: str = Query(...), state: Optional[str] = None, redirect_uri: Optional[str] = Query(None)):
-    """Callback de Google OAuth"""
+async def google_callback(
+    request: Request,
+    code: str = Query(...),
+    state: Optional[str] = None,
+    redirect_uri: Optional[str] = Query(None)
+):
+    """Callback de Google OAuth.
+    Si no se proporciona redirect_uri explícito, intenta derivarlo dinámicamente del host para evitar
+    el error típico de "redirect_uri_mismatch" cuando en el login se usó un dominio productivo y
+    aquí se intenta intercambiar con el valor por defecto (localhost)."""
     try:
-        # Autenticar con Google y obtener token
-        auth_token = await google_auth.authenticate_with_google(code, redirect_override=redirect_uri)
+        derived_redirect = None
+        if not redirect_uri:
+            host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+            proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+            if host:
+                # Priorizar variable de entorno si existe (ya debería tener la ruta correcta)
+                env_redirect = os.getenv("GOOGLE_REDIRECT_URI", "")
+                if env_redirect and host in env_redirect:
+                    derived_redirect = env_redirect
+                else:
+                    # Soportar ambos posibles paths registrados: /auth/callback y /auth/google/callback
+                    # Escoger según lo que esté registrado en env si existe, si no /auth/callback por defecto.
+                    if env_redirect:
+                        # Reemplazar sólo el origen manteniendo path del env
+                        try:
+                            from urllib.parse import urlparse
+                            p = urlparse(env_redirect)
+                            derived_redirect = f"{proto}://{host}{p.path}"
+                        except Exception:
+                            derived_redirect = f"{proto}://{host}/auth/callback"
+                    else:
+                        derived_redirect = f"{proto}://{host}/auth/callback"
+        effective_redirect = redirect_uri or derived_redirect
+
+        auth_token = await google_auth.authenticate_with_google(code, redirect_override=effective_redirect)
 
         return {
             "success": True,
             "access_token": auth_token.access_token,
             "user": auth_token.user,
-            "message": "Autenticación exitosa"
+            "message": "Autenticación exitosa",
+            "redirect_uri_used": effective_redirect or google_auth.redirect_uri
         }
     except Exception as e:
         logger.error(f"Error en callback de Google: {type(e).__name__}: {e}")
-        # Respuesta JSON clara (frontend espera JSON). Nunca HTML.
         raise HTTPException(status_code=400, detail="Error en autenticación con Google (callback)")
 
 @auth_router.get("/me")
