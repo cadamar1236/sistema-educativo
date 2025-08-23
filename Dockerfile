@@ -27,6 +27,8 @@ COPY julia-frontend/postcss.config.js ./
 COPY julia-frontend/ ./
 
 # Build del frontend para producción
+ARG NEXT_PUBLIC_API_URL=/
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NODE_ENV=production
 RUN npm run build
 
