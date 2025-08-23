@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+import asyncio
 import uvicorn
 from typing import List, Optional, Dict, Any
 import json
@@ -194,16 +195,89 @@ else:
 FRONTEND_EXPORT_DIR = "static"  # Directorio donde copiamos el 'out' de Next.js
 NEXT_ASSETS_DIR = os.path.join(FRONTEND_EXPORT_DIR, "_next")
 
-if os.path.isdir(FRONTEND_EXPORT_DIR):
-    # Montar bundles Next.js (importante que se monte antes de rutas catch-all)
-    if os.path.isdir(NEXT_ASSETS_DIR):
-        app.mount("/_next", StaticFiles(directory=NEXT_ASSETS_DIR), name="_next")
-        print("✅ (/ _next) bundles Next.js montados")
-    # Montar también /static para assets no versionados (imágenes, etc.)
-    app.mount("/static", StaticFiles(directory=FRONTEND_EXPORT_DIR), name="static")
-    print("✅ (/static) directorio export montado")
-else:
-    print("⚠️ No existe el directorio 'static' con el export del frontend. Ejecuta build/export de Next.js.")
+def _is_route_mounted(prefix: str) -> bool:
+    try:
+        return any(getattr(r, 'path', '').startswith(prefix) for r in app.routes)
+    except Exception:
+        return False
+
+def _mount_static_exports(initial=False):
+    """Intenta montar /_next y /static si existen. safe idempotent."""
+    if not os.path.isdir(FRONTEND_EXPORT_DIR):
+        if initial:
+            print("⚠️ No existe el directorio 'static' con el export del frontend. Ejecuta build/export de Next.js.")
+        return
+    # /static mount
+    if not _is_route_mounted('/static'):
+        try:
+            app.mount("/static", StaticFiles(directory=FRONTEND_EXPORT_DIR), name="static")
+            print("✅ (/static) directorio export montado")
+        except Exception as e:
+            print("❌ Error montando /static:", e)
+    # /_next mount
+    if os.path.isdir(NEXT_ASSETS_DIR) and not _is_route_mounted('/_next'):
+        try:
+            app.mount("/_next", StaticFiles(directory=NEXT_ASSETS_DIR), name="_next")
+            print("✅ (/_next) bundles Next.js montados")
+        except Exception as e:
+            print("❌ Error montando /_next:", e)
+    # Validación rápida de un chunk si existe el directorio de chunks
+    chunks_dir = os.path.join(NEXT_ASSETS_DIR, 'static', 'chunks')
+    if os.path.isdir(chunks_dir):
+        try:
+            sample = next((f for f in os.listdir(chunks_dir) if f.endswith('.js')), None)
+            if sample:
+                print(f"🔍 Chunk de ejemplo disponible: {sample}")
+        except Exception as e:
+            print("[STATIC DEBUG] Error listando chunks:", e)
+
+_mount_static_exports(initial=True)
+
+async def _delayed_next_mount(max_wait_seconds: int = 30):
+    """Espera a que aparezca static/_next tras un build tardío y monta dinámicamente."""
+    for i in range(max_wait_seconds):
+        if _is_route_mounted('/_next'):
+            return
+        if os.path.isdir(NEXT_ASSETS_DIR):
+            _mount_static_exports()
+            return
+        await asyncio.sleep(1)
+    if not _is_route_mounted('/_next'):
+        print(f"⌛ No se encontró static/_next tras {max_wait_seconds}s; los assets seguirán faltando hasta que hagas rebuild.")
+
+@app.on_event("startup")
+async def ensure_next_after_startup():
+    # Si al inicio no estaba montado _next pero luego el usuario ejecuta el script de build, lo montamos.
+    if not _is_route_mounted('/_next'):
+        asyncio.create_task(_delayed_next_mount())
+
+@app.get("/debug/remount-static")
+def debug_remount_static():
+    """Fuerza un reintento de montaje de static/_next (dev)."""
+    before = {"_next": _is_route_mounted('/_next'), "static": _is_route_mounted('/static')}
+    _mount_static_exports()
+    after = {"_next": _is_route_mounted('/_next'), "static": _is_route_mounted('/static')}
+    return {"before": before, "after": after, "exists": {"static": os.path.isdir(FRONTEND_EXPORT_DIR), "_next": os.path.isdir(NEXT_ASSETS_DIR)}}
+
+@app.get("/debug/static-status")
+def debug_static_status():
+    """Estado detallado de los assets estáticos para diagnosticar errores 'Unexpected token <'."""
+    chunks_dir = os.path.join(NEXT_ASSETS_DIR, 'static', 'chunks')
+    chunk_list = []
+    err = None
+    if os.path.isdir(chunks_dir):
+        try:
+            chunk_list = sorted([f for f in os.listdir(chunks_dir) if f.endswith('.js')])[:25]
+        except Exception as e:
+            err = repr(e)
+    return {
+        "mounted": {"_next": _is_route_mounted('/_next'), "static": _is_route_mounted('/static')},
+        "paths": {"frontend_root": os.path.abspath(FRONTEND_EXPORT_DIR), "next_dir": os.path.abspath(NEXT_ASSETS_DIR), "chunks_dir": chunks_dir},
+        "exists": {"frontend_root": os.path.isdir(FRONTEND_EXPORT_DIR), "_next": os.path.isdir(NEXT_ASSETS_DIR), "chunks": os.path.isdir(chunks_dir)},
+        "chunks_sample": chunk_list,
+        "error_listing": err,
+        "route_count": len(app.routes)
+    }
 
 ########## FIN DEBUG AVANZADO (REMOVIDO) ##########
 
