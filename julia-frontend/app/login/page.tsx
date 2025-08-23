@@ -1,22 +1,35 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiBase } from '../../lib/runtimeApi';
 import { Button, Card } from '@nextui-org/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+
+// Forzar render estático compatible con output: 'export'
+export const dynamic = 'force-static';
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const searchParams = useSearchParams();
-  const nextParam = searchParams?.get('next');
+  // Guardamos el parámetro next= de forma manual (solo en cliente) para no depender de useSearchParams (que marca la ruta como dinámica y rompe export)
+  const [nextParam, setNextParam] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        const val = url.searchParams.get('next');
+        if (val && val.startsWith('/')) setNextParam(val);
+      } catch {}
+    }
+  }, []);
 
   const startGoogle = async () => {
     try {
       setLoading(true);
       setError(null);
-      // call backend to get Google auth URL
-  const res = await fetch(`${apiBase()}/api/auth/google/login`);
+  // call backend to get Google auth URL
+	const res = await fetch(`${apiBase()}/api/auth/google/login`);
       if (!res.ok) throw new Error('No se pudo iniciar autenticación');
       const data = await res.json();
       if (data.auth_url) {
@@ -24,6 +37,9 @@ export default function LoginPage() {
         if (typeof window !== 'undefined') {
           const desired = nextParam && nextParam.startsWith('/') ? nextParam : (localStorage.getItem('auth_redirect') || '/dashboard');
           localStorage.setItem('auth_redirect', desired);
+          if (data.redirect_uri_used) {
+            sessionStorage.setItem('oauth_redirect_uri', data.redirect_uri_used);
+          }
         }
         window.location.href = data.auth_url;
       } else {
