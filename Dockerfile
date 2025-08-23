@@ -75,17 +75,17 @@ COPY *.py ./
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
-# Copiar frontend build desde el stage anterior
-# Si se usa App Router sin 'next export', la carpeta 'out' puede no existir; usamos .next
-RUN mkdir -p ./static/frontend/_next/static ./static/frontend/public
-COPY --from=frontend-builder /frontend/.next/static ./static/frontend/_next/static/
-COPY --from=frontend-builder /frontend/public ./static/frontend/public/
-# (Opcional) Si activas output standalone en next.config.js podrías copiar .next/standalone y .next/server
-# COPY --from=frontend-builder /frontend/.next/standalone ./standalone
-# COPY --from=frontend-builder /frontend/.next/server ./static/frontend/_next/server
+# Copiar sitio estático exportado (Next.js output export genera /frontend/out)
+# y además conservar el código fuente del frontend dentro de /app/frontend-src (opcional para debug)
+COPY --from=frontend-builder /frontend/out/ ./static/
+COPY --from=frontend-builder /frontend/ ./frontend-src/
 
-# Crear fallback index.html si no existe
-RUN echo '<!DOCTYPE html><html><head><title>Sistema Educativo</title></head><body><h1>🎓 Sistema Educativo Multiagente</h1><p><a href="/docs">Ver API Documentation</a></p></body></html>' > /app/static/index.html
+# (Opcional) Si se cambiara a modo no-export, se podría copiar sólo los assets:
+# COPY --from=frontend-builder /frontend/.next/static ./static/_next/static/
+# y serviría otro servidor para páginas dinámicas.
+
+# Crear fallback index.html solo si el build no produjo uno
+RUN [ -f /app/static/index.html ] || echo '<!DOCTYPE html><html><head><title>Sistema Educativo</title></head><body><h1>🎓 Sistema Educativo Multiagente</h1><p><a href="/docs">Ver API Documentation</a></p></body></html>' > /app/static/index.html
 
 # Cambiar permisos al usuario app
 RUN chown -R app:app /app
