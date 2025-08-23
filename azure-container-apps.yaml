@@ -24,10 +24,10 @@ applications:
       max: 10
     cpu: 1.0
     memory: 2Gi
-    port: 8000
+    port: 80  # Ahora el contenedor expone Nginx en 80 (FastAPI interno en 8001)
     ingress:
       external: true
-      targetPort: 8000
+      targetPort: 80
     env:
       - name: ENVIRONMENT
         value: "production"
@@ -37,8 +37,9 @@ applications:
         value: "4"
       - name: UVICORN_HOST
         value: "0.0.0.0"
+      # UVICORN_PORT interno (no expuesto) - FastAPI corre detrás de Nginx en 8001
       - name: UVICORN_PORT
-        value: "8000"
+        value: "8001"
       - name: DATABASE_URL
         secretRef: database-url
       - name: REDIS_URL
@@ -181,7 +182,7 @@ health:
   livenessProbe:
     httpGet:
       path: /health
-      port: 8000
+      port: 80
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
@@ -189,7 +190,7 @@ health:
   readinessProbe:
     httpGet:
       path: /health
-      port: 8000
+      port: 80
     initialDelaySeconds: 5
     periodSeconds: 5
     timeoutSeconds: 3
