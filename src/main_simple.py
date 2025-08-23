@@ -89,19 +89,37 @@ SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
 
-# Importar routers de autenticación y suscripciones (forzar import relativo primero)
+"""Import robusto de routers de autenticación.
+Si falla, mostramos diagnóstico detallado para evitar 404 silencioso en /api/auth/google/login."""
 _AUTH_ROUTERS_AVAILABLE = False
-try:
-    from .api_auth_endpoints import auth_router, subscription_router  # type: ignore
-    _AUTH_ROUTERS_AVAILABLE = True
-except Exception as _e_rel:
+_auth_import_errors = {}
+import importlib, types
+
+def _attempt_import(name: str):
     try:
-        from api_auth_endpoints import auth_router, subscription_router  # type: ignore
+        return importlib.import_module(name)
+    except Exception as e:  # registrar error
+        _auth_import_errors[name] = repr(e)
+        return None
+
+mod_candidates = [
+    'src.api_auth_endpoints',  # paquete completo
+    'api_auth_endpoints',      # nivel superior
+    __name__.rsplit('.',1)[0] + '.api_auth_endpoints' if '.' in __name__ else None,
+]
+seen = set()
+for cand in [c for c in mod_candidates if c and c not in seen]:
+    seen.add(cand)
+    mod = _attempt_import(cand)
+    if isinstance(mod, types.ModuleType) and hasattr(mod, 'auth_router') and hasattr(mod, 'subscription_router'):
+        auth_router = getattr(mod, 'auth_router')  # type: ignore
+        subscription_router = getattr(mod, 'subscription_router')  # type: ignore
         _AUTH_ROUTERS_AVAILABLE = True
-        print("ℹ️ Routers importados usando ruta absoluta de nivel superior")
-    except Exception as _e_abs:
-        print(f"⚠️ No se pudieron importar routers de auth/subscription (relativo: {_e_rel}; absoluto: {_e_abs})")
-        _AUTH_ROUTERS_AVAILABLE = False
+        print(f"✅ auth_router importado desde '{cand}'")
+        break
+
+if not _AUTH_ROUTERS_AVAILABLE:
+    print("❌ No se pudo importar auth_router. Intentos:", _auth_import_errors)
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -128,17 +146,17 @@ async def health():
 
 # Registrar routers de auth si están disponibles (ANTES del catch-all)
 if _AUTH_ROUTERS_AVAILABLE:
-    app.include_router(auth_router)
-    app.include_router(subscription_router)
-    print("✅ Routers de autenticación y suscripciones registrados (/api/auth, /api/subscription)")
-    # Debug: listar rutas clave para confirmar que /api/auth/google/login existe
     try:
+        app.include_router(auth_router)
+        app.include_router(subscription_router)
+        print("✅ Routers de autenticación y suscripciones registrados (/api/auth, /api/subscription)")
         auth_paths = [r.path for r in app.routes if r.path.startswith('/api/auth')]
         print("🔎 Rutas auth registradas:", auth_paths)
         if '/api/auth/google/login' not in auth_paths:
             print("⚠️ Advertencia: /api/auth/google/login no aparece en el listado de rutas")
-    except Exception as _e_list:
-        print(f"⚠️ No se pudo listar rutas auth: {_e_list}")
+    except Exception as e:
+        print("❌ Fallo al incluir routers de auth:", e)
+        _AUTH_ROUTERS_AVAILABLE = False
 else:
     print("ℹ️ Routers de autenticación no disponibles; endpoints OAuth no expuestos")
 

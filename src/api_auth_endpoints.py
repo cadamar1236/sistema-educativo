@@ -60,9 +60,9 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
             else:
                 base_redirect = base_redirect + '/auth/callback'
 
-    # Obtener URL de autorización con override si corresponde
-    auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
-    logger.info(f"Google login redirect_uri_used={base_redirect or google_auth.redirect_uri}")
+        # Obtener URL de autorización con override si corresponde
+        auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
+        logger.info(f"Google login redirect_uri_used={base_redirect or google_auth.redirect_uri}")
         return {
             "auth_url": auth_url,
             "redirect_uri_used": base_redirect or google_auth.redirect_uri,
