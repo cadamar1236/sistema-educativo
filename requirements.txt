@@ -53,6 +53,8 @@ cryptography>=41.0.0
 passlib[bcrypt]>=1.7.4
 python-jose[cryptography]>=3.3.0
 httpx>=0.25.0
+google-auth>=2.30.0
+google-auth-oauthlib>=1.2.0
 
 # Base de datos adicionales
 asyncpg>=0.29.0

@@ -2224,7 +2224,10 @@ async def get_library_stats_real():
 
 # === ASSIGNMENT SYSTEM (BÁSICO) ===
 
-from auth.google_auth import require_teacher, get_current_user
+try:
+    from src.auth.google_auth import require_teacher, get_current_user  # preferred explicit path
+except ImportError:  # fallback if PYTHONPATH adjusted differently
+    from auth.google_auth import require_teacher, get_current_user
 
 @app.post("/api/assignments")
 async def create_assignment(request_data: dict, current_user=Depends(require_teacher)):

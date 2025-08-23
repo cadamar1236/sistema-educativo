@@ -9,7 +9,10 @@ import logging
 import os
 
 # Importar servicios
-from auth.google_auth import google_auth, get_current_user, require_subscription, require_teacher
+try:
+    from src.auth.google_auth import google_auth, get_current_user, require_subscription, require_teacher
+except ImportError:  # fallback if executed with package root already at src
+    from auth.google_auth import google_auth, get_current_user, require_subscription, require_teacher
 from auth.users_db import update_role
 from payments.stripe_subscription import stripe_service, SubscriptionTier
 
