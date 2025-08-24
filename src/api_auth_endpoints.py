@@ -701,16 +701,19 @@ async def oauth_callback_handler(request: Request, state: str = None, code: str 
             
             # Generar HTML de respuesta que almacena el token y redirige al frontend
             frontend_domain = "https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io"
+            user_data_json = json.dumps(auth_token.user).replace("'", "\\'")
             html_response = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <title>Autenticación Exitosa</title>
                 <script>
+                    console.log('[OAuth] Storing token in localStorage');
                     // Almacenar token en localStorage
-                    localStorage.setItem('auth_token', '{auth_token.access_token}');
-                    localStorage.setItem('user_data', JSON.stringify({json.dumps(auth_token.user)}));
+                    localStorage.setItem('access_token', '{auth_token.access_token}');
+                    localStorage.setItem('user_data', '{user_data_json}');
                     
+                    console.log('[OAuth] Token stored, redirecting to:', '{frontend_domain}{redirect_to}');
                     // Redirigir al dashboard del frontend
                     window.location.href = '{frontend_domain}{redirect_to}';
                 </script>
@@ -739,6 +742,118 @@ async def oauth_callback_handler(request: Request, state: str = None, code: str 
             
     except Exception as e:
         logger.error(f"[OAuth] Error en callback: {e}")
+        return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Error</title></head>
+            <body>
+                <h2>Error</h2>
+                <p>Ha ocurrido un error inesperado.</p>
+                <a href="/login">Volver al Login</a>
+            </body>
+            </html>
+        """, status_code=500)
+
+@oauth_redirect_router.get("/google/callback")
+async def oauth_google_callback_handler(request: Request, state: str = None, code: str = None):
+    """
+    Endpoint específico para Google OAuth callback - /auth/google/callback
+    Este endpoint maneja redirecciones desde Google cuando está configurado así
+    """
+    try:
+        logger.info(f"[OAuth] Google callback capturado en /auth/google/callback")
+        logger.info(f"[OAuth] State: {state}, Code: {code[:20]}..." if code else "No code")
+        
+        # Procesar el callback directamente aquí
+        if not state or not code:
+            logger.error("[OAuth] Faltan parámetros state o code")
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>Faltan parámetros requeridos para la autenticación.</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
+
+        # Parsear y validar state
+        state_data = _parse_state(state)
+        if not state_data:
+            logger.error("[OAuth] State inválido o expirado")
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>La sesión de autenticación ha expirado.</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
+        
+        redirect_to = state_data.get("n", "/dashboard")
+        
+        # Autenticar con Google usando el redirect URI correcto
+        try:
+            # Use the correct redirect URI for Google callback
+            public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip('/')
+            if public_base:
+                correct_redirect_uri = f"{public_base}/auth/google/callback"
+            else:
+                host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+                proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
+                correct_redirect_uri = f"{proto}://{host}/auth/google/callback"
+                
+            logger.info(f"[OAuth] Intentando autenticación con redirect_uri: {correct_redirect_uri}")
+            auth_token = await google_auth.authenticate_with_google(code, redirect_override=correct_redirect_uri)
+            
+            # Generar HTML de respuesta que almacena el token y redirige al frontend
+            frontend_domain = "https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io"
+            user_data_json = json.dumps(auth_token.user).replace("'", "\\'")
+            html_response = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Autenticación Exitosa</title>
+                <script>
+                    console.log('[OAuth] Storing token in localStorage');
+                    // Almacenar token en localStorage
+                    localStorage.setItem('access_token', '{auth_token.access_token}');
+                    localStorage.setItem('user_data', '{user_data_json}');
+                    
+                    console.log('[OAuth] Token stored, redirecting to:', '{frontend_domain}{redirect_to}');
+                    // Redirigir al dashboard del frontend
+                    window.location.href = '{frontend_domain}{redirect_to}';
+                </script>
+            </head>
+            <body>
+                <p>Autenticación exitosa, redirigiendo...</p>
+            </body>
+            </html>
+            """
+            
+            return HTMLResponse(html_response)
+            
+        except Exception as auth_error:
+            logger.error(f"[OAuth] Error de autenticación: {auth_error}")
+            return HTMLResponse(f"""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>No se pudo completar la autenticación: {str(auth_error)}</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
+            
+    except Exception as e:
+        logger.error(f"[OAuth] Error en google callback: {e}")
         return HTMLResponse("""
             <!DOCTYPE html>
             <html>
