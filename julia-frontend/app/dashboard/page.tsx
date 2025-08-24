@@ -17,9 +17,21 @@ export default function DashboardPage() {
 	if (loading) return <div className="p-8">Cargando aplicación...</div>;
 	if (!user) {
 		if (typeof window !== 'undefined') {
-			try { localStorage.setItem('auth_redirect', '/dashboard'); } catch {}
+			try { 
+				localStorage.setItem('auth_redirect', '/dashboard'); 
+				// Auto redirect to login after a short delay
+				setTimeout(() => router.push('/login'), 2000);
+			} catch {}
 		}
-		return <div className="p-8">No autenticado.</div>;
+		return (
+			<div className="p-8 text-center">
+				<div className="max-w-md mx-auto">
+					<h2 className="text-xl font-semibold mb-2">Acceso Requerido</h2>
+					<p className="text-gray-600 mb-4">Debes iniciar sesión para acceder al dashboard.</p>
+					<p className="text-sm text-gray-500">Redirigiendo al login...</p>
+				</div>
+			</div>
+		);
 	}
 	if (user.role === 'teacher') return null; // redirigiendo
 

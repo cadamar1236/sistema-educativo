@@ -32,19 +32,41 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkAuth = useCallback(async () => {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-      if (!token) { setUser(null); setLoading(false); return }
-  const res = await fetch(`${apiBase()}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!token) { 
+        console.log('[Auth] No token found'); 
+        setUser(null); 
+        setLoading(false); 
+        return 
+      }
+      console.log('[Auth] Checking token...', token.substring(0, 20) + '...');
+      const res = await fetch(`${apiBase()}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       if (res.ok) {
-        const data = await res.json(); setUser(data.user); setError(null)
-      } else { localStorage.removeItem('access_token'); setUser(null) }
-    } catch (e) { setError('Error verificando autenticación'); setUser(null) }
+        const data = await res.json(); 
+        console.log('[Auth] User authenticated:', data.user.email, 'role:', data.user.role);
+        setUser(data.user); 
+        setError(null)
+      } else { 
+        console.log('[Auth] Token invalid, removing...'); 
+        localStorage.removeItem('access_token'); 
+        setUser(null) 
+      }
+    } catch (e) { 
+      console.error('[Auth] Error checking auth:', e);
+      setError('Error verificando autenticación'); 
+      setUser(null) 
+    }
     finally { setLoading(false) }
   }, [])
 
   useEffect(() => { checkAuth() }, [checkAuth])
 
   const login = useCallback(async (token: string, u: User) => {
-    localStorage.setItem('access_token', token); setUser(u); setError(null); setLoading(false)
+    console.log('[Auth] Logging in user:', u.email, 'role:', u.role);
+    localStorage.setItem('access_token', token); 
+    setUser(u); 
+    setError(null); 
+    setLoading(false);
+    console.log('[Auth] Login complete, user set');
   }, [])
 
   const logout = useCallback(async () => {
