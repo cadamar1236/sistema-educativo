@@ -272,10 +272,24 @@ async def auth_debug_config(request: Request):
         "host": host,
         "proto": proto,
         "env_GOOGLE_REDIRECT_URI": os.getenv("GOOGLE_REDIRECT_URI"),
+        "env_PUBLIC_BASE_URL": os.getenv("PUBLIC_BASE_URL"),
         "default_service_redirect_uri": google_auth.redirect_uri,
         "suggested_frontend_callback": f"{proto}://{host}/auth/callback" if host else None,
         "suggested_backend_callback": f"{proto}://{host}/api/auth/google/callback/redirect" if host else None,
         "cookie_secure_example": (proto == 'https')
+    }
+
+@auth_router.get("/debug/token")
+async def debug_token_check(request: Request):
+    """Debug endpoint to check if token is being received correctly."""
+    auth_header = request.headers.get("authorization", "")
+    cookie_token = request.cookies.get("access_token", "")
+    
+    return {
+        "auth_header": auth_header[:50] + "..." if auth_header else "None",
+        "cookie_token": cookie_token[:50] + "..." if cookie_token else "None",
+        "headers": dict(request.headers),
+        "cookies": dict(request.cookies)
     }
 
 @auth_router.get("/me")
@@ -315,17 +329,31 @@ async def google_callback_redirect(
 (function() {{
   try {{
     var token = {auth_token.access_token!r};
+    console.log('[Auth] Guardando token:', token.substring(0, 20) + '...');
     localStorage.setItem('access_token', token);
     sessionStorage.setItem('access_token', token);
     document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
-    window.location.replace({next_path!r});
+    console.log('[Auth] Token guardado, redirigiendo a:', {next_path!r});
+    
+    // Verificar que se guardó correctamente
+    var stored = localStorage.getItem('access_token');
+    if (stored === token) {{
+      console.log('[Auth] Token verificado en localStorage');
+      setTimeout(function() {{
+        window.location.replace({next_path!r});
+      }}, 100);
+    }} else {{
+      console.error('[Auth] Error: token no se guardó correctamente');
+      document.body.innerHTML = 'Error: token no se guardó correctamente';
+    }}
   }} catch(e) {{
+    console.error('[Auth] Error almacenando token:', e);
     document.body.innerHTML = 'Error almacenando token: ' + e;
     return;
   }}
 }})();
 </script>
-Redirigiendo...
+<div>Guardando token y redirigiendo...</div>
 </body></html>"""
         secure_flag = (request.headers.get('x-forwarded-proto') == 'https') or (request.url.scheme == 'https')
         from datetime import timedelta
