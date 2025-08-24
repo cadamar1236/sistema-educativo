@@ -650,24 +650,79 @@ async def get_usage_stats(current_user: Dict[str, Any] = Depends(get_current_use
 # ==================== ENDPOINTS DE REDIRECCIÓN OAUTH ====================
 
 @oauth_redirect_router.get("/google/callback/redirect")
-async def oauth_redirect_handler(request: Request):
+async def oauth_redirect_handler(request: Request, state: str = None, code: str = None):
     """
-    Endpoint para capturar redirecciones de OAuth que lleguen sin el prefijo /api
-    y reenviarlas al endpoint correcto
+    Endpoint para manejar redirecciones de OAuth que lleguen sin el prefijo /api
+    Procesa directamente el callback en lugar de crear un loop de redirecciones
     """
     try:
-        logger.info(f"[OAuth] Redirección capturada en /auth/google/callback/redirect")
-        logger.info(f"[OAuth] Query params: {dict(request.query_params)}")
+        logger.info(f"[OAuth] Callback directo capturado en /auth/google/callback/redirect")
+        logger.info(f"[OAuth] State: {state}, Code: {code[:20]}..." if code else "No code")
         
-        # Construir la URL del endpoint correcto con todos los parámetros
-        query_string = str(request.query_params)
-        redirect_url = f"/api/auth/google/callback/redirect?{query_string}"
+        # Procesar el callback directamente aquí usando la misma lógica del endpoint /api
+        if not state or not code:
+            raise HTTPException(status_code=400, detail="Faltan parámetros state o code")
+
+        # Parsear y validar state
+        state_data = _parse_state(state)
+        if not state_data:
+            raise HTTPException(status_code=400, detail="State inválido")
         
-        logger.info(f"[OAuth] Redirigiendo a: {redirect_url}")
+        redirect_to = state_data.get("n", "/dashboard")
         
-        # Redirección interna usando Response con Location header
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=redirect_url, status_code=307)
+        # Autenticar con Google usando el código
+        try:
+            auth_token = await google_auth.authenticate_with_google(code, redirect_override=state_data.get("r"))
+        except HTTPException as he:
+            if 'redirect_uri' in str(getattr(he, 'detail', '')).lower():
+                logger.warning('[OAuth] Retry sin override por mismatch redirect_uri')
+                auth_token = await google_auth.authenticate_with_google(code, redirect_override=None)
+            else:
+                raise
+        
+        logger.info(f"[OAuth] Usuario autenticado exitosamente")
+        
+        # Retornar HTML con script para guardar token y redirigir
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Autenticación Exitosa</title>
+        </head>
+        <body>
+            <div style="text-align: center; margin-top: 50px;">
+                <h2>Autenticación exitosa</h2>
+                <p>Redirigiendo al dashboard...</p>
+            </div>
+            <script>
+                try {{
+                    var token = {auth_token.access_token!r};
+                    console.log('[Auth] Guardando token:', token.substring(0, 20) + '...');
+                    localStorage.setItem('access_token', token);
+                    sessionStorage.setItem('access_token', token);
+                    document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
+                    console.log('[Auth] Token guardado, redirigiendo a:', {redirect_to!r});
+                    
+                    // Verificar que se guardó correctamente
+                    var stored = localStorage.getItem('access_token');
+                    if (stored === token) {{
+                        console.log('[Auth] Token verificado en localStorage');
+                        setTimeout(function() {{
+                            window.location.replace({redirect_to!r});
+                        }}, 100);
+                    }} else {{
+                        console.error('[Auth] Error: token no se guardó correctamente');
+                        document.body.innerHTML = 'Error: token no se guardó correctamente';
+                    }}
+                }} catch(e) {{
+                    console.error('[Auth] Error almacenando token:', e);
+                    document.body.innerHTML = 'Error almacenando token: ' + e;
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
         
     except Exception as e:
         logger.error(f"[OAuth] Error en redirección: {e}")
