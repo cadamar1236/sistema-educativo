@@ -26,7 +26,9 @@ COPY julia-frontend/postcss.config.js ./
 # Copiar todo el código del frontend
 COPY julia-frontend/ ./
 
-ARG NEXT_PUBLIC_API_URL=/
+# Variables de build para frontend - permitir override desde docker build
+ARG NEXT_PUBLIC_API_URL=https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io
+ARG PUBLIC_BASE_URL=https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NODE_ENV=production
 # Build: con output:'export' en next.config.js, 'npm run build' genera directamente 'out/'
@@ -114,6 +116,7 @@ ENV HOST=0.0.0.0
 ENV PORT=8000
 ENV WORKERS=1
 ENV RELOAD=false
+ENV PUBLIC_BASE_URL=https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io
 
 # Exponer puerto HTTP servido por Nginx
 EXPOSE 80
