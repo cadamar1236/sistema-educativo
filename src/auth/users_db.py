@@ -50,26 +50,56 @@ def get_session() -> Session:
     return Session(engine, future=True)
 
 def get_or_create_from_google(google_user: dict, role: str, subscription_tier: str) -> User:
-    init_db()
-    with get_session() as session:
-        stmt = select(User).where(User.id == google_user["id"])
-        existing = session.execute(stmt).scalar_one_or_none()
-        if existing:
-            changed = False
-            for field in ["email", "name", "picture"]:
-                val = google_user.get(field)
-                if val and getattr(existing, field) != val:
-                    setattr(existing, field, val); changed = True
-            if existing.role != role:
-                existing.role = role; changed = True
-            if existing.subscription_tier != subscription_tier:
-                existing.subscription_tier = subscription_tier; changed = True
-            if changed:
-                session.add(existing)
-                session.commit()
-                session.refresh(existing)
-            return existing
-        u = User(
+    try:
+        init_db()
+        with get_session() as session:
+            stmt = select(User).where(User.id == google_user["id"])
+            existing = session.execute(stmt).scalar_one_or_none()
+            if existing:
+                changed = False
+                for field in ["email", "name", "picture"]:
+                    val = google_user.get(field)
+                    if val and getattr(existing, field) != val:
+                        setattr(existing, field, val); changed = True
+                if existing.role != role:
+                    existing.role = role; changed = True
+                if existing.subscription_tier != subscription_tier:
+                    existing.subscription_tier = subscription_tier; changed = True
+                if changed:
+                    session.add(existing)
+                    session.commit()
+                    session.refresh(existing)
+                return existing
+            u = User(
+                id=google_user["id"],
+                email=google_user["email"],
+                name=google_user.get("name", ""),
+                picture=google_user.get("picture"),
+                role=role,
+                subscription_tier=subscription_tier,
+            )
+            session.add(u)
+            session.commit()
+            session.refresh(u)
+            return u
+    except Exception as e:
+        # Si la base de datos falla, crear un objeto User temporal sin persistir
+        import logging
+        logging.getLogger(__name__).warning(f"Database connection failed, creating temporary user: {e}")
+        
+        # Crear un User object que no depende de la DB
+        class TempUser:
+            def __init__(self, id, email, name, picture, role, subscription_tier):
+                self.id = id
+                self.email = email  
+                self.name = name
+                self.picture = picture
+                self.role = role
+                self.subscription_tier = subscription_tier
+                self.created_at = datetime.utcnow()
+                self.updated_at = datetime.utcnow()
+        
+        return TempUser(
             id=google_user["id"],
             email=google_user["email"],
             name=google_user.get("name", ""),
@@ -77,10 +107,6 @@ def get_or_create_from_google(google_user: dict, role: str, subscription_tier: s
             role=role,
             subscription_tier=subscription_tier,
         )
-        session.add(u)
-        session.commit()
-        session.refresh(u)
-        return u
 
 def update_role(email: str, role: str) -> bool:
     init_db()
