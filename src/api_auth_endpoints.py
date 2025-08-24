@@ -3,7 +3,7 @@ Endpoints de autenticación con Google y suscripciones con Stripe
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
-from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from typing import Dict, Any, Optional
 import hmac, hashlib, base64, json, time
 import logging
@@ -25,26 +25,50 @@ subscription_router = APIRouter(prefix="/api/subscription", tags=["Subscriptions
 
 # ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
+STATE_MAX_AGE = 300  # segundos
+
+def _oauth_state_secret() -> bytes:
+    return (getattr(google_auth, 'JWT_SECRET', None) or os.getenv('JWT_SECRET', 'dev_secret')).encode()
+
+def _sign_state(payload: Dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(',', ':')).encode()
+    b64 = base64.urlsafe_b64encode(raw).decode().rstrip('=')
+    sig = hmac.new(_oauth_state_secret(), b64.encode(), hashlib.sha256).hexdigest()
+    return f"{b64}.{sig}"
+
+def _parse_state(state: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not state or '.' not in state:
+        return None
+    try:
+        b64, sig = state.split('.', 1)
+        expected = hmac.new(_oauth_state_secret(), b64.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            logger.warning("STATE firma inválida")
+            return None
+        data = base64.urlsafe_b64decode(b64 + '==')
+        payload = json.loads(data.decode())
+        if int(time.time()) - int(payload.get('t', 0)) > STATE_MAX_AGE:
+            logger.warning("STATE expirado")
+            return None
+        return payload
+    except Exception as e:
+        logger.warning(f"Error parseando state: {e}")
+        return None
+
 @auth_router.get("/google/login")
 async def google_login(
     request: Request,
-    redirect_url: Optional[str] = None,
-    backend_redirect: bool = False,
     next: str = "/dashboard",
     force_http_loopback: bool = True,
     prefer_localhost: bool = True
 ):
-    """Iniciar proceso de login con Google.
-    Modos:
-      - Frontend callback (default) -> página estática /auth/callback
-      - backend_redirect=true -> backend intercambia y redirige
-    Ajustes loopback: force_http_loopback, prefer_localhost ayudan a evitar redirect_uri mismatch.
-    """
+    """Login unificado Google: siempre usa callback backend /api/auth/google/callback/redirect.
+    Devuelve auth_url y state firmado que incluye redirect y next interno."""
     try:
         raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
         port = request.url.port
         proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-        if prefer_localhost and raw_host and raw_host.startswith("127."):
+        if prefer_localhost and raw_host.startswith("127."):
             raw_host = "localhost"
         if force_http_loopback and (raw_host.startswith("localhost") or raw_host.startswith("127.")):
             proto = "http"
@@ -52,49 +76,12 @@ async def google_login(
             host = f"{raw_host}:{port}"
         else:
             host = raw_host
-<<<<<<< HEAD
-        # Forzaremos un único flujo robusto: backend redirect endpoint
         base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
-        # Firmar estado con redirect y next para asegurar usar EXACTAMENTE el mismo redirect en el intercambio
-        state_payload = {
-            "r": base_redirect,  # redirect_uri usado en auth
-            "n": next if next.startswith('/') else '/dashboard',  # next
-            "t": int(time.time())  # timestamp para caducidad
-=======
-        base_redirect = redirect_url
-        if not base_redirect:
-            if backend_redirect:
-                base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
-            else:
-                base_redirect = f"{proto}://{host}/auth/callback"
-        base_redirect = base_redirect.split('?')[0].split('#')[0]
-        if (not backend_redirect) and not base_redirect.rstrip('/').endswith('/auth/callback'):
-            if base_redirect.endswith('/'):
-                base_redirect = base_redirect.rstrip('/')
-            base_redirect += '/auth/callback'
-        
-        # Usar la variable de entorno GOOGLE_REDIRECT_URI si está definida
-        env_redirect = os.getenv("GOOGLE_REDIRECT_URI")
-        if env_redirect:
-            base_redirect = env_redirect
-            
-        auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
-        logger.info(f"Google login mode={'backend' if backend_redirect else 'frontend'} redirect={base_redirect} host={host}")
-        return {
-            "auth_url": auth_url,
-            "redirect_uri_used": base_redirect,
-            "mode": "backend" if backend_redirect else "frontend",
-            "next": next if backend_redirect else None,
-            "message": "Redirige al usuario a esta URL para autenticación"
->>>>>>> fc1ae1c8bdb2ffcb2ba957836c0fe1777f7c3adf
-        }
-        raw = json.dumps(state_payload, separators=(',', ':')).encode()
-        b64 = base64.urlsafe_b64encode(raw).decode().rstrip('=')
-        sig = hmac.new(google_auth.JWT_SECRET.encode() if hasattr(google_auth, 'JWT_SECRET') else os.getenv('JWT_SECRET','secret').encode(), b64.encode(), hashlib.sha256).hexdigest()
-        signed_state = f"{b64}.{sig}"
+        safe_next = next if isinstance(next, str) and next.startswith('/') else '/dashboard'
+        signed_state = _sign_state({"r": base_redirect, "n": safe_next, "t": int(time.time())})
         auth_url = google_auth.get_authorization_url(state=signed_state, redirect_override=base_redirect)
-        logger.info(f"Google login redirect={base_redirect} host={host} next={next} state_len={len(signed_state)}")
-        return {"auth_url": auth_url, "redirect_uri_used": base_redirect, "state": signed_state, "message": "Redirige al usuario a esta URL"}
+        logger.info(f"[oauth] login host={host} redirect={base_redirect} next={safe_next}")
+        return {"auth_url": auth_url, "redirect_uri_used": base_redirect, "state": signed_state}
     except Exception as e:
         logger.error(f"Error iniciando login con Google: {e}")
         raise HTTPException(status_code=500, detail="Error iniciando autenticación")
@@ -185,65 +172,68 @@ async def google_callback(
         logger.error(f"Error en callback de Google: {type(e).__name__}: {e}")
         raise HTTPException(status_code=400, detail="Error en autenticación con Google (callback)")
 
-@auth_router.get("/google/callback/redirect")
-async def google_callback_redirect(
-    request: Request,
-    code: str = Query(...),
-    state: Optional[str] = None,
-    redirect_uri: Optional[str] = Query(None)
-):
-    """Callback alternativo: el backend intercambia el código, guarda token (cookie + storage via JS) y redirige.
-    Registra esta URL exacta en Google Console como redirect si usas modo backend_redirect."""
+STATE_MAX_AGE = 300  # segundos
+
+def _oauth_state_secret() -> bytes:
+    # Unificar origen del secreto (usa el mismo que los JWT para consistencia)
+    return (getattr(google_auth, 'JWT_SECRET', None) or os.getenv('JWT_SECRET', 'dev_secret')).encode()
+
+def _sign_state(payload: Dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(',', ':')).encode()
+    b64 = base64.urlsafe_b64encode(raw).decode().rstrip('=')
+    sig = hmac.new(_oauth_state_secret(), b64.encode(), hashlib.sha256).hexdigest()
+    return f"{b64}.{sig}"
+
+def _parse_state(state: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not state or '.' not in state:
+        return None
     try:
-        # Decodificar y validar estado
-        next_path = '/dashboard'
-        chosen_redirect = None
-        if state:
-            try:
-                b64, sig = state.split('.', 1)
-                data_bytes = base64.urlsafe_b64decode(b64 + '==')
-                expected_sig = hmac.new(os.getenv('JWT_SECRET','secret').encode(), b64.encode(), hashlib.sha256).hexdigest()
-                if hmac.compare_digest(sig, expected_sig):
-                    payload = json.loads(data_bytes.decode())
-                    # Expira en 5 minutos
-                    if int(time.time()) - int(payload.get('t',0)) < 300:
-                        chosen_redirect = payload.get('r')
-                        np = payload.get('n','/dashboard')
-                        if isinstance(np,str) and np.startswith('/'):
-                            next_path = np
-                else:
-                    logger.warning('STATE firma inválida en callback redirect')
-            except Exception as se:
-                logger.warning(f'Error parsing state: {se}')
-        # Fallback si no se pudo usar state
-        if not chosen_redirect:
-            chosen_redirect = _normalize_redirect(_derive_effective_redirect(request, redirect_uri)) or request.url._url.split('?')[0]
-        try:
-            auth_token = await google_auth.authenticate_with_google(code, redirect_override=chosen_redirect)
-        except HTTPException as he:
-            detail = getattr(he, 'detail', '')
-            if 'redirect_uri' in str(detail).lower():
-                logger.warning('(redirect) retry sin override por redirect_uri mismatch')
-                auth_token = await google_auth.authenticate_with_google(code, redirect_override=None)
-            else:
-                raise
-        html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Autenticando...</title></head><body>
-<script>
-try {{
-  const token = {auth_token.access_token!r};
-  localStorage.setItem('access_token', token);
-  sessionStorage.setItem('access_token', token);
-  document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
-  window.location.replace({next_path!r});
-}} catch(e) {{
-  document.body.innerHTML = 'Error almacenando token: ' + e;
-}}
-</script>
-Redirigiendo...
-</body></html>"""
-        secure_flag = (request.url.scheme == 'https') or (request.headers.get('x-forwarded-proto') == 'https')
-        from datetime import timedelta
-        resp = HTMLResponse(html)
+        b64, sig = state.split('.', 1)
+        expected = hmac.new(_oauth_state_secret(), b64.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            logger.warning("STATE firma inválida")
+            return None
+        data = base64.urlsafe_b64decode(b64 + '==')
+        payload = json.loads(data.decode())
+        if int(time.time()) - int(payload.get('t', 0)) > STATE_MAX_AGE:
+            logger.warning("STATE expirado")
+            return None
+        return payload
+    except Exception as e:
+        logger.warning(f"Error parseando state: {e}")
+        return None
+
+@auth_router.get("/google/login")
+async def google_login(
+    request: Request,
+    next: str = "/dashboard",
+    force_http_loopback: bool = True,
+    prefer_localhost: bool = True
+):
+    """Inicia login Google. Devuelve auth_url + state firmado. Luego el navegador se redirige allí.
+    Tras autenticarse Google vuelve a /api/auth/google/callback/redirect donde se intercambia el code y se redirige a 'next'."""
+    try:
+        raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+        port = request.url.port
+        proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+        if prefer_localhost and raw_host.startswith("127."):
+            raw_host = "localhost"
+        if force_http_loopback and (raw_host.startswith("localhost") or raw_host.startswith("127.")):
+            proto = "http"
+        if ':' not in raw_host and port and port not in (80, 443):
+            host = f"{raw_host}:{port}"
+        else:
+            host = raw_host
+        base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
+        safe_next = next if isinstance(next, str) and next.startswith('/') else '/dashboard'
+        state_payload = {"r": base_redirect, "n": safe_next, "t": int(time.time())}
+        signed_state = _sign_state(state_payload)
+        auth_url = google_auth.get_authorization_url(state=signed_state, redirect_override=base_redirect)
+        logger.info(f"[oauth] login host={host} redirect={base_redirect} next={safe_next}")
+        return {"auth_url": auth_url, "redirect_uri_used": base_redirect, "state": signed_state}
+    except Exception as e:
+        logger.error(f"Error iniciando login con Google: {e}")
+        raise HTTPException(status_code=500, detail="Error iniciando autenticación")
         resp.set_cookie(
             key="access_token",
             value=auth_token.access_token,
@@ -282,78 +272,62 @@ async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_curre
         "role": current_user.get("role", "student")
     }
 
-@auth_router.post("/logout")
-async def logout(response: Response):
-    """Cerrar sesión"""
-    # En una implementación real, invalidarías el token en la BD
-    response.delete_cookie("access_token")
-    return {"message": "Sesión cerrada exitosamente"}
-
-@auth_router.post("/refresh")
-async def refresh_token(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """Refrescar token de acceso"""
+@auth_router.get("/google/callback/redirect")
+async def google_callback_redirect(
+    request: Request,
+    code: str = Query(...),
+    state: Optional[str] = None
+):
+    """Callback final: intercambia el code, setea cookie + storage y redirige al dashboard (o 'next' del state)."""
     try:
-        # Obtener tier actualizado
-        subscription_tier = await stripe_service.get_user_subscription_tier(current_user["sub"])
-
-        # Crear nuevo token
-        from auth.google_auth import GoogleUser
-        user = GoogleUser(
-            id=current_user["sub"],
-            email=current_user["email"],
-            name=current_user["name"],
-            picture=current_user.get("picture", ""),
-            verified_email=True
+        payload = _parse_state(state)
+        # redirect_uri exacto usado en login; si falla se intenta derivar.
+        chosen_redirect = (payload or {}).get('r') or _normalize_redirect(_derive_effective_redirect(request, None))
+        next_path = (payload or {}).get('n') or '/dashboard'
+        if not isinstance(next_path, str) or not next_path.startswith('/'):
+            next_path = '/dashboard'
+        try:
+            auth_token = await google_auth.authenticate_with_google(code, redirect_override=chosen_redirect)
+        except HTTPException as he:
+            if 'redirect_uri' in str(getattr(he, 'detail', '')).lower():
+                logger.warning('[oauth] retry sin override por mismatch redirect_uri')
+                auth_token = await google_auth.authenticate_with_google(code, redirect_override=None)
+            else:
+                raise
+        # Respuesta HTML que guarda el token y redirige
+        html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Autenticando...</title></head><body>
+<script>
+(function() {{
+  try {{
+    var token = {auth_token.access_token!r};
+    localStorage.setItem('access_token', token);
+    sessionStorage.setItem('access_token', token);
+    document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
+    window.location.replace({next_path!r});
+  }} catch(e) {{
+    document.body.innerHTML = 'Error almacenando token: ' + e;
+    return;
+  }}
+}})();
+</script>
+Redirigiendo...
+</body></html>"""
+        secure_flag = (request.headers.get('x-forwarded-proto') == 'https') or (request.url.scheme == 'https')
+        from datetime import timedelta
+        resp = HTMLResponse(html)
+        resp.set_cookie(
+            key="access_token",
+            value=auth_token.access_token,
+            max_age=int(timedelta(hours=24).total_seconds()),
+            httponly=False,
+            secure=secure_flag,
+            samesite="Lax",
+            path="/"
         )
-        new_token = google_auth.create_jwt_token(
-            user,
-            subscription_tier,
-            current_user.get("role", "student")
-        )
-        return {"access_token": new_token, "token_type": "bearer"}
+        return resp
     except Exception as e:
-        logger.error(f"Error refrescando token: {e}")
-        raise HTTPException(status_code=500, detail="Error refrescando token")
-
-@auth_router.post("/role/update")
-async def set_user_role(payload: Dict[str, str], current_user: Dict[str, Any] = Depends(require_teacher)):
-    """Actualizar rol de un usuario (simple: solo profesores pueden promover)."""
-    email = payload.get("email")
-    role = payload.get("role")
-    if not email or not role:
-        raise HTTPException(status_code=400, detail="email y role requeridos")
-    if role not in {"student", "teacher"}:
-        raise HTTPException(status_code=400, detail="rol inválido")
-    ok = update_role(email, role)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return {"success": True, "email": email, "role": role}
-
-# ==================== ENDPOINTS DE SUSCRIPCIÓN ====================
-
-@subscription_router.get("/plans")
-async def get_subscription_plans():
-    """Obtener todos los planes de suscripción disponibles"""
-    plans = []
-    for tier, plan in stripe_service.plans.items():
-        plans.append({
-            "tier": tier.value,
-            "name": plan.name,
-            "price_monthly": plan.price_monthly,
-            "price_yearly": plan.price_yearly,
-            "features": plan.features,
-            "limits": plan.limits
-        })
-    
-    return {
-        "plans": plans,
-        "currency": "USD"
-    }
-
-@subscription_router.get("/current")
-async def get_current_subscription(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """Obtener suscripción actual del usuario"""
-    try:
+        logger.error(f"Error en callback redirect Google: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=400, detail="Error en autenticación con Google (redirect)")
         # Aquí obtendrías el subscription_id de tu BD
         subscription_id = current_user.get("subscription_id")
         
