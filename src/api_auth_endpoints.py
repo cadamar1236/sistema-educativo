@@ -86,8 +86,18 @@ def _derive_effective_redirect(request: Request, redirect_uri: Optional[str]) ->
     """Derivar redirect_uri coherente con el host actual si no se pasó explícita."""
     if redirect_uri:
         return redirect_uri
-    host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+    # Host + puerto real
+    raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+    port = request.url.port
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    # Si es loopback forzar http para coincidir con registros típicos
+    if raw_host.startswith("127.") or raw_host.startswith("localhost"):
+        proto = "http"
+    # Incluir puerto si no estándar y no ya presente en header
+    if ':' not in raw_host and port and port not in (80, 443):
+        host = f"{raw_host}:{port}"
+    else:
+        host = raw_host
     if not host:
         return None
     env_redirect = os.getenv("GOOGLE_REDIRECT_URI", "")
@@ -105,11 +115,18 @@ def _derive_effective_redirect(request: Request, redirect_uri: Optional[str]) ->
 def _normalize_redirect(r: Optional[str]) -> Optional[str]:
     if not r:
         return r
-    r = r.split('?')[0].split('#')[0]
-    if not r.rstrip('/').endswith('/auth/callback'):
+        raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+        port = request.url.port
+        proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+        if raw_host.startswith("127.") or raw_host.startswith("localhost"):
+            proto = "http"
+        if ':' not in raw_host and port and port not in (80, 443):
+            host = f"{raw_host}:{port}"
+        else:
+            host = raw_host
         if r.endswith('/'):
             r = r.rstrip('/')
-        r = r + '/auth/callback'
+        base_redirect = redirect_url  # respeto explícito primero
     return r
 
 @auth_router.get("/google/callback")
