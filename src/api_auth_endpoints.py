@@ -29,48 +29,41 @@ async def google_login(
     request: Request,
     redirect_url: Optional[str] = None,
     backend_redirect: bool = False,
-    next: str = "/dashboard"
+    next: str = "/dashboard",
+    force_http_loopback: bool = True,
+    prefer_localhost: bool = True
 ):
     """Iniciar proceso de login con Google.
     Modos:
-      - Frontend callback (default): redirect_uri -> /auth/callback (página estática JS hace fetch al backend)
-      - Backend redirect (backend_redirect=true): redirect_uri -> /api/auth/google/callback/redirect (el backend intercambia y redirige a `next`).
-    Parámetros:
-      redirect_url: permitir forzar completamente la URL (útil en desarrollo)
-      next: usado sólo en modo backend_redirect para redirigir después de guardar token.
+      - Frontend callback (default) -> página estática /auth/callback
+      - backend_redirect=true -> backend intercambia y redirige
+    Ajustes loopback: force_http_loopback, prefer_localhost ayudan a evitar redirect_uri mismatch.
     """
     try:
-        host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+        raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+        port = request.url.port
         proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-        env_redirect = os.getenv("GOOGLE_REDIRECT_URI", "")
-
-        base_redirect = redirect_url  # respeto explícito primero
+        if prefer_localhost and raw_host and raw_host.startswith("127."):
+            raw_host = "localhost"
+        if force_http_loopback and (raw_host.startswith("localhost") or raw_host.startswith("127.")):
+            proto = "http"
+        if ':' not in raw_host and port and port not in (80, 443):
+            host = f"{raw_host}:{port}"
+        else:
+            host = raw_host
+        base_redirect = redirect_url
         if not base_redirect:
             if backend_redirect:
-                # Ruta del backend que auto-guarda token
                 base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
             else:
-                # Ruta estática del frontend
                 base_redirect = f"{proto}://{host}/auth/callback"
-
-        # Normalización básica
         base_redirect = base_redirect.split('?')[0].split('#')[0]
-        # No forzar /auth/callback si el usuario eligió backend_redirect (ya termina distinto)
         if (not backend_redirect) and not base_redirect.rstrip('/').endswith('/auth/callback'):
             if base_redirect.endswith('/'):
                 base_redirect = base_redirect.rstrip('/')
-            base_redirect = base_redirect + '/auth/callback'
-
+            base_redirect += '/auth/callback'
         auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
-        logger.info(
-            "Google login generado",
-            extra={
-                "mode": "backend" if backend_redirect else "frontend",
-                "redirect_uri_used": base_redirect,
-                "next": next
-            }
-        )
-        # Si usamos backend_redirect incluimos next para que el front lo almacene y lo pase cuando envíe al usuario (o embed en state fuera de scope)
+        logger.info(f"Google login mode={'backend' if backend_redirect else 'frontend'} redirect={base_redirect} host={host}")
         return {
             "auth_url": auth_url,
             "redirect_uri_used": base_redirect,
@@ -115,18 +108,10 @@ def _derive_effective_redirect(request: Request, redirect_uri: Optional[str]) ->
 def _normalize_redirect(r: Optional[str]) -> Optional[str]:
     if not r:
         return r
-        raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
-        port = request.url.port
-        proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-        if raw_host.startswith("127.") or raw_host.startswith("localhost"):
-            proto = "http"
-        if ':' not in raw_host and port and port not in (80, 443):
-            host = f"{raw_host}:{port}"
-        else:
-            host = raw_host
-        if r.endswith('/'):
-            r = r.rstrip('/')
-        base_redirect = redirect_url  # respeto explícito primero
+    r = r.split('?')[0].split('#')[0]
+    if r.endswith('/'):
+        r = r.rstrip('/')
+    # Permitir tanto /auth/callback como /api/auth/google/callback/redirect sin forzar
     return r
 
 @auth_router.get("/google/callback")
@@ -166,7 +151,7 @@ async def google_callback(
             key="access_token",
             value=auth_token.access_token,
             max_age=int(timedelta(hours=24).total_seconds()),
-            httponly=False,  # si quieres reforzar cambia a True y haz fetch con Authorization header
+            httponly=False,
             secure=secure_flag,
             samesite="Lax",
             path="/"
@@ -184,9 +169,8 @@ async def google_callback_redirect(
     redirect_uri: Optional[str] = Query(None),
     next: str = Query("/dashboard")
 ):
-    """Variante que devuelve HTML + JS: guarda token en localStorage y redirige a `next`.
-    Útil para flujos donde solo se puede configurar redirect_uri hacia un endpoint backend.
-    Uso: registra esta ruta en Google Console y añade ?next=%2Fdashboard (o la ruta deseada)."""
+    """Callback alternativo: el backend intercambia el código, guarda token (cookie + storage via JS) y redirige.
+    Registra esta URL exacta en Google Console como redirect si usas modo backend_redirect."""
     try:
         effective_redirect = _normalize_redirect(_derive_effective_redirect(request, redirect_uri))
         try:
@@ -194,15 +178,14 @@ async def google_callback_redirect(
         except HTTPException as he:
             detail = getattr(he, 'detail', '')
             if 'redirect_uri' in str(detail).lower():
-                logger.warning("Reintentando intercambio (redirect variant) sin override por redirect_uri mismatch")
+                logger.warning("(redirect) retry sin override por redirect_uri mismatch")
                 auth_token = await google_auth.authenticate_with_google(code, redirect_override=None)
             else:
                 raise
-        # Sanitizar next (solo rutas internas)
         if not next.startswith('/'):
             next = '/'
-        html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Autenticando...</title></head>
-<body><script>
+        html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Autenticando...</title></head><body>
+<script>
 try {{
   const token = {auth_token.access_token!r};
   localStorage.setItem('access_token', token);
@@ -210,12 +193,14 @@ try {{
   document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
   window.location.replace({next!r});
 }} catch(e) {{
-  document.body.innerHTML = '<pre>Error almacenando token: ' + e + '</pre>';
+  document.body.innerHTML = 'Error almacenando token: ' + e;
 }}
-</script><p>Redirigiendo...</p></body></html>"""
+</script>
+Redirigiendo...
+</body></html>"""
         secure_flag = (request.url.scheme == 'https') or (request.headers.get('x-forwarded-proto') == 'https')
-        resp = HTMLResponse(html)
         from datetime import timedelta
+        resp = HTMLResponse(html)
         resp.set_cookie(
             key="access_token",
             value=auth_token.access_token,
