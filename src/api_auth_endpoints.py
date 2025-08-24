@@ -62,7 +62,7 @@ def _parse_state(state: Optional[str]) -> Optional[Dict[str, Any]]:
 @auth_router.get("/google/login")
 async def google_login(
     request: Request,
-    next: str = "/dashboard",
+    next: str = "/",
     force_http_loopback: bool = True,
     prefer_localhost: bool = True
 ):
@@ -97,7 +97,7 @@ async def google_login(
                 host = raw_host
         # Usar el redirect URI que coincide con Google OAuth - /auth/google/callback/redirect
         base_redirect = f"{proto}://{host}/auth/google/callback/redirect"
-        safe_next = next if isinstance(next, str) and next.startswith('/') else '/dashboard'
+        safe_next = next if isinstance(next, str) and next.startswith('/') else '/'
         signed_state = _sign_state({"r": base_redirect, "n": safe_next, "t": int(time.time())})
         auth_url = google_auth.get_authorization_url(state=signed_state, redirect_override=base_redirect)
         logger.info(f"[oauth] login host={host} redirect={base_redirect} next={safe_next} public_base={'yes' if public_base else 'no'}")
@@ -348,9 +348,9 @@ async def google_callback_redirect(
         payload = _parse_state(state)
         # redirect_uri exacto usado en login; si falla se intenta derivar.
         chosen_redirect = (payload or {}).get('r') or _normalize_redirect(_derive_effective_redirect(request, None))
-        next_path = (payload or {}).get('n') or '/dashboard'
+        next_path = (payload or {}).get('n') or '/'
         if not isinstance(next_path, str) or not next_path.startswith('/'):
-            next_path = '/dashboard'
+            next_path = '/'
         
         # Add timeout and error handling for OAuth token exchange
         try:
@@ -683,7 +683,7 @@ async def oauth_callback_handler(request: Request, state: str = None, code: str 
                 </html>
             """, status_code=400)
         
-        redirect_to = state_data.get("n", "/dashboard")
+        redirect_to = state_data.get("n", "/")
         
         # Autenticar con Google usando el redirect URI correcto
         try:
@@ -795,7 +795,7 @@ async def oauth_google_callback_handler(request: Request, state: str = None, cod
                 </html>
             """, status_code=400)
         
-        redirect_to = state_data.get("n", "/dashboard")
+        redirect_to = state_data.get("n", "/")
         
         # Autenticar con Google usando el redirect URI correcto
         try:
@@ -907,7 +907,7 @@ async def oauth_redirect_handler(request: Request, state: str = None, code: str 
                 </html>
             """, status_code=400)
         
-        redirect_to = state_data.get("n", "/dashboard")
+        redirect_to = state_data.get("n", "/")
         
         # Autenticar con Google usando el código
         # Use the correct redirect URI that matches what Google expects
