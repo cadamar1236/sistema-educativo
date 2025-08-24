@@ -95,8 +95,8 @@ async def google_login(
                 host = f"{raw_host}:{port}"
             else:
                 host = raw_host
-        # Usar el redirect URI estándar que está registrado en Google OAuth
-        base_redirect = f"{proto}://{host}/auth/callback"
+        # Usar el redirect URI que coincide con Google OAuth - /auth/google/callback
+        base_redirect = f"{proto}://{host}/auth/google/callback"
         safe_next = next if isinstance(next, str) and next.startswith('/') else '/dashboard'
         signed_state = _sign_state({"r": base_redirect, "n": safe_next, "t": int(time.time())})
         auth_url = google_auth.get_authorization_url(state=signed_state, redirect_override=base_redirect)
@@ -134,7 +134,7 @@ def _derive_effective_redirect(request: Request, redirect_uri: Optional[str]) ->
             return f"{proto}://{host}{p.path}"
         except Exception:
             pass
-    return f"{proto}://{host}/auth/callback"
+    return f"{proto}://{host}/auth/google/callback"
 
 def _normalize_redirect(r: Optional[str]) -> Optional[str]:
     if not r:
@@ -205,7 +205,7 @@ async def auth_debug_config(request: Request):
         "env_GOOGLE_REDIRECT_URI": os.getenv("GOOGLE_REDIRECT_URI"),
         "env_PUBLIC_BASE_URL": os.getenv("PUBLIC_BASE_URL"),
         "default_service_redirect_uri": google_auth.redirect_uri,
-        "suggested_frontend_callback": f"{proto}://{host}/auth/callback" if host else None,
+        "suggested_frontend_callback": f"{proto}://{host}/auth/google/callback" if host else None,
         "suggested_backend_callback": f"{proto}://{host}/api/auth/google/callback/redirect" if host else None,
         "cookie_secure_example": (proto == 'https')
     }
@@ -687,14 +687,14 @@ async def oauth_callback_handler(request: Request, state: str = None, code: str 
         
         # Autenticar con Google usando el redirect URI correcto
         try:
-            # Use the standard /auth/callback redirect URI that Google expects
+            # Use the /auth/google/callback redirect URI that matches login generation
             public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip('/')
             if public_base:
-                correct_redirect_uri = f"{public_base}/auth/callback"
+                correct_redirect_uri = f"{public_base}/auth/google/callback"
             else:
                 host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
                 proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
-                correct_redirect_uri = f"{proto}://{host}/auth/callback"
+                correct_redirect_uri = f"{proto}://{host}/auth/google/callback"
                 
             logger.info(f"[OAuth] Intentando autenticación con redirect_uri: {correct_redirect_uri}")
             auth_token = await google_auth.authenticate_with_google(code, redirect_override=correct_redirect_uri)
