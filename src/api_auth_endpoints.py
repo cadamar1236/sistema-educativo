@@ -62,6 +62,12 @@ async def google_login(
             if base_redirect.endswith('/'):
                 base_redirect = base_redirect.rstrip('/')
             base_redirect += '/auth/callback'
+        
+        # Usar la variable de entorno GOOGLE_REDIRECT_URI si está definida
+        env_redirect = os.getenv("GOOGLE_REDIRECT_URI")
+        if env_redirect:
+            base_redirect = env_redirect
+            
         auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
         logger.info(f"Google login mode={'backend' if backend_redirect else 'frontend'} redirect={base_redirect} host={host}")
         return {
