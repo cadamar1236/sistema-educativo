@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 import hmac, hashlib, base64, json, time
 import logging
 import os
+from datetime import datetime
 
 # Importar servicios
 try:
@@ -335,6 +336,76 @@ async def get_current_user_info(request: Request):
             detail="Token inválido",
             headers={"WWW-Authenticate": "Bearer"}
         )
+
+@auth_router.get("/debug/auth")
+async def debug_auth_status(request: Request):
+    """Endpoint de debug para diagnosticar problemas de autenticación"""
+    debug_info = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "request_headers": dict(request.headers),
+        "cookies": dict(request.cookies),
+        "auth_analysis": {}
+    }
+    
+    # Analizar Authorization header
+    auth_header = request.headers.get("authorization", "")
+    debug_info["auth_analysis"]["authorization_header"] = {
+        "present": bool(auth_header),
+        "starts_with_bearer": auth_header.startswith("Bearer "),
+        "length": len(auth_header),
+        "preview": auth_header[:50] + "..." if len(auth_header) > 50 else auth_header
+    }
+    
+    # Analizar cookie
+    cookie_token = request.cookies.get("access_token")
+    debug_info["auth_analysis"]["cookie_token"] = {
+        "present": bool(cookie_token),
+        "length": len(cookie_token) if cookie_token else 0,
+        "preview": cookie_token[:50] + "..." if cookie_token and len(cookie_token) > 50 else cookie_token
+    }
+    
+    # Intentar extraer token
+    token = None
+    token_source = None
+    
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        token_source = "authorization_header"
+    elif cookie_token:
+        token = cookie_token
+        token_source = "cookie"
+    
+    debug_info["auth_analysis"]["token_extraction"] = {
+        "token_found": bool(token),
+        "token_source": token_source,
+        "token_length": len(token) if token else 0,
+        "token_preview": token[:50] + "..." if token and len(token) > 50 else token
+    }
+    
+    # Si hay token, intentar verificarlo
+    if token:
+        try:
+            payload = google_auth.verify_jwt_token(token)
+            debug_info["auth_analysis"]["token_verification"] = {
+                "status": "valid",
+                "payload_keys": list(payload.keys()) if payload else [],
+                "user_id": payload.get("sub", "N/A") if payload else "N/A",
+                "email": payload.get("email", "N/A") if payload else "N/A",
+                "exp": payload.get("exp", "N/A") if payload else "N/A"
+            }
+        except Exception as e:
+            debug_info["auth_analysis"]["token_verification"] = {
+                "status": "invalid",
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+    else:
+        debug_info["auth_analysis"]["token_verification"] = {
+            "status": "no_token",
+            "message": "No token found to verify"
+        }
+    
+    return debug_info
 
 @auth_router.get("/google/callback/redirect")
 async def google_callback_redirect(
