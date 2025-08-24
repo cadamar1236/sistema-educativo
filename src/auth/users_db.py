@@ -19,9 +19,16 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/users.db")
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 5  # 5 segundos timeout para SQLite
+    } if DATABASE_URL.startswith("sqlite") else {
+        "connect_timeout": 5,  # 5 segundos timeout para PostgreSQL
+        "command_timeout": 10   # 10 segundos timeout para comandos
+    },
     future=True,
     pool_pre_ping=True,
+    pool_timeout=5,  # Timeout para obtener conexión del pool
 )
 
 Base = declarative_base()
@@ -50,6 +57,16 @@ def get_session() -> Session:
     return Session(engine, future=True)
 
 def get_or_create_from_google(google_user: dict, role: str, subscription_tier: str) -> User:
+    import signal
+    import logging
+    
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Database operation timed out")
+    
+    # Configurar timeout de 8 segundos para toda la operación
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(8)
+    
     try:
         init_db()
         with get_session() as session:
@@ -82,10 +99,34 @@ def get_or_create_from_google(google_user: dict, role: str, subscription_tier: s
             session.commit()
             session.refresh(u)
             return u
-    except Exception as e:
+    except (Exception, TimeoutError) as e:
         # Si la base de datos falla, crear un objeto User temporal sin persistir
-        import logging
         logging.getLogger(__name__).warning(f"Database connection failed, creating temporary user: {e}")
+        
+        # Crear un User object que no depende de la DB
+        class TempUser:
+            def __init__(self, id, email, name, picture, role, subscription_tier):
+                self.id = id
+                self.email = email  
+                self.name = name
+                self.picture = picture
+                self.role = role
+                self.subscription_tier = subscription_tier
+                self.created_at = datetime.utcnow()
+                self.updated_at = datetime.utcnow()
+        
+        return TempUser(
+            id=google_user["id"],
+            email=google_user["email"],
+            name=google_user.get("name", ""),
+            picture=google_user.get("picture"),
+            role=role,
+            subscription_tier=subscription_tier,
+        )
+    finally:
+        # Limpiar el timeout
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
         
         # Crear un User object que no depende de la DB
         class TempUser:
