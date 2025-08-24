@@ -109,14 +109,19 @@ mod_candidates = [
     __name__.rsplit('.',1)[0] + '.api_auth_endpoints' if '.' in __name__ else None,
 ]
 seen = set()
+oauth_redirect_router = None  # Inicializar variable
 for cand in [c for c in mod_candidates if c and c not in seen]:
     seen.add(cand)
     mod = _attempt_import(cand)
     if isinstance(mod, types.ModuleType) and hasattr(mod, 'auth_router') and hasattr(mod, 'subscription_router'):
         auth_router = getattr(mod, 'auth_router')  # type: ignore
         subscription_router = getattr(mod, 'subscription_router')  # type: ignore
+        # Intentar importar también oauth_redirect_router si existe
+        oauth_redirect_router = getattr(mod, 'oauth_redirect_router', None) if hasattr(mod, 'oauth_redirect_router') else None
         _AUTH_ROUTERS_AVAILABLE = True
         print(f"✅ auth_router importado desde '{cand}'")
+        if oauth_redirect_router:
+            print(f"✅ oauth_redirect_router también importado")
         break
 
 if not _AUTH_ROUTERS_AVAILABLE:
@@ -180,9 +185,16 @@ if _AUTH_ROUTERS_AVAILABLE:
     try:
         app.include_router(auth_router)
         app.include_router(subscription_router)
-        print("✅ Routers de autenticación y suscripciones registrados (/api/auth, /api/subscription)")
+        # Registrar también oauth_redirect_router si existe
+        if oauth_redirect_router:
+            app.include_router(oauth_redirect_router)
+            print("✅ Routers de autenticación, suscripciones y OAuth redirect registrados (/api/auth, /api/subscription, /auth)")
+        else:
+            print("✅ Routers de autenticación y suscripciones registrados (/api/auth, /api/subscription)")
         auth_paths = [r.path for r in app.routes if r.path.startswith('/api/auth')]
+        oauth_paths = [r.path for r in app.routes if r.path.startswith('/auth')]
         print("🔎 Rutas auth registradas:", auth_paths)
+        print("🔎 Rutas OAuth redirect registradas:", oauth_paths)
         if '/api/auth/google/login' not in auth_paths:
             print("⚠️ Advertencia: /api/auth/google/login no aparece en el listado de rutas")
     except Exception as e:

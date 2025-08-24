@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 subscription_router = APIRouter(prefix="/api/subscription", tags=["Subscriptions"])
 
+# Router adicional para capturar redirecciones de OAuth que lleguen sin el prefijo /api
+oauth_redirect_router = APIRouter(prefix="/auth", tags=["OAuth Redirects"])
+
 # ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
 STATE_MAX_AGE = 300  # segundos
@@ -643,3 +646,41 @@ async def get_usage_stats(current_user: Dict[str, Any] = Depends(get_current_use
     except Exception as e:
         logger.error(f"Error obteniendo estadísticas de uso: {e}")
         raise HTTPException(status_code=500, detail="Error obteniendo estadísticas")
+
+# ==================== ENDPOINTS DE REDIRECCIÓN OAUTH ====================
+
+@oauth_redirect_router.get("/google/callback/redirect")
+async def oauth_redirect_handler(request: Request):
+    """
+    Endpoint para capturar redirecciones de OAuth que lleguen sin el prefijo /api
+    y reenviarlas al endpoint correcto
+    """
+    try:
+        logger.info(f"[OAuth] Redirección capturada en /auth/google/callback/redirect")
+        logger.info(f"[OAuth] Query params: {dict(request.query_params)}")
+        
+        # Construir la URL del endpoint correcto con todos los parámetros
+        query_string = str(request.query_params)
+        redirect_url = f"/api/auth/google/callback/redirect?{query_string}"
+        
+        logger.info(f"[OAuth] Redirigiendo a: {redirect_url}")
+        
+        # Redirección interna usando Response con Location header
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=redirect_url, status_code=307)
+        
+    except Exception as e:
+        logger.error(f"[OAuth] Error en redirección: {e}")
+        return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Error de Autenticación</title>
+            </head>
+            <body>
+                <h1>Error de Autenticación</h1>
+                <p>Hubo un problema procesando su solicitud de autenticación.</p>
+                <p><a href="/login">Intentar de nuevo</a></p>
+            </body>
+            </html>
+        """, status_code=500)
