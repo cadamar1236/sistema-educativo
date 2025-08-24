@@ -52,6 +52,7 @@ async def google_login(
             host = f"{raw_host}:{port}"
         else:
             host = raw_host
+<<<<<<< HEAD
         # Forzaremos un único flujo robusto: backend redirect endpoint
         base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
         # Firmar estado con redirect y next para asegurar usar EXACTAMENTE el mismo redirect en el intercambio
@@ -59,6 +60,33 @@ async def google_login(
             "r": base_redirect,  # redirect_uri usado en auth
             "n": next if next.startswith('/') else '/dashboard',  # next
             "t": int(time.time())  # timestamp para caducidad
+=======
+        base_redirect = redirect_url
+        if not base_redirect:
+            if backend_redirect:
+                base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
+            else:
+                base_redirect = f"{proto}://{host}/auth/callback"
+        base_redirect = base_redirect.split('?')[0].split('#')[0]
+        if (not backend_redirect) and not base_redirect.rstrip('/').endswith('/auth/callback'):
+            if base_redirect.endswith('/'):
+                base_redirect = base_redirect.rstrip('/')
+            base_redirect += '/auth/callback'
+        
+        # Usar la variable de entorno GOOGLE_REDIRECT_URI si está definida
+        env_redirect = os.getenv("GOOGLE_REDIRECT_URI")
+        if env_redirect:
+            base_redirect = env_redirect
+            
+        auth_url = google_auth.get_authorization_url(redirect_override=base_redirect)
+        logger.info(f"Google login mode={'backend' if backend_redirect else 'frontend'} redirect={base_redirect} host={host}")
+        return {
+            "auth_url": auth_url,
+            "redirect_uri_used": base_redirect,
+            "mode": "backend" if backend_redirect else "frontend",
+            "next": next if backend_redirect else None,
+            "message": "Redirige al usuario a esta URL para autenticación"
+>>>>>>> fc1ae1c8bdb2ffcb2ba957836c0fe1777f7c3adf
         }
         raw = json.dumps(state_payload, separators=(',', ':')).encode()
         b64 = base64.urlsafe_b64encode(raw).decode().rstrip('=')
