@@ -191,81 +191,7 @@ async def google_callback(
         logger.error(f"Error en callback de Google: {type(e).__name__}: {e}")
         raise HTTPException(status_code=400, detail="Error en autenticación con Google (callback)")
 
-STATE_MAX_AGE = 300  # segundos
-
-def _oauth_state_secret() -> bytes:
-    # Unificar origen del secreto (usa el mismo que los JWT para consistencia)
-    return (getattr(google_auth, 'JWT_SECRET', None) or os.getenv('JWT_SECRET', 'dev_secret')).encode()
-
-def _sign_state(payload: Dict[str, Any]) -> str:
-    raw = json.dumps(payload, separators=(',', ':')).encode()
-    b64 = base64.urlsafe_b64encode(raw).decode().rstrip('=')
-    sig = hmac.new(_oauth_state_secret(), b64.encode(), hashlib.sha256).hexdigest()
-    return f"{b64}.{sig}"
-
-def _parse_state(state: Optional[str]) -> Optional[Dict[str, Any]]:
-    if not state or '.' not in state:
-        return None
-    try:
-        b64, sig = state.split('.', 1)
-        expected = hmac.new(_oauth_state_secret(), b64.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected):
-            logger.warning("STATE firma inválida")
-            return None
-        data = base64.urlsafe_b64decode(b64 + '==')
-        payload = json.loads(data.decode())
-        if int(time.time()) - int(payload.get('t', 0)) > STATE_MAX_AGE:
-            logger.warning("STATE expirado")
-            return None
-        return payload
-    except Exception as e:
-        logger.warning(f"Error parseando state: {e}")
-        return None
-
-@auth_router.get("/google/login")
-async def google_login(
-    request: Request,
-    next: str = "/dashboard",
-    force_http_loopback: bool = True,
-    prefer_localhost: bool = True
-):
-    """Inicia login Google. Devuelve auth_url + state firmado. Luego el navegador se redirige allí.
-    Tras autenticarse Google vuelve a /api/auth/google/callback/redirect donde se intercambia el code y se redirige a 'next'."""
-    try:
-        raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
-        port = request.url.port
-        proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-        if prefer_localhost and raw_host.startswith("127."):
-            raw_host = "localhost"
-        if force_http_loopback and (raw_host.startswith("localhost") or raw_host.startswith("127.")):
-            proto = "http"
-        if ':' not in raw_host and port and port not in (80, 443):
-            host = f"{raw_host}:{port}"
-        else:
-            host = raw_host
-        base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
-        safe_next = next if isinstance(next, str) and next.startswith('/') else '/dashboard'
-        state_payload = {"r": base_redirect, "n": safe_next, "t": int(time.time())}
-        signed_state = _sign_state(state_payload)
-        auth_url = google_auth.get_authorization_url(state=signed_state, redirect_override=base_redirect)
-        logger.info(f"[oauth] login host={host} redirect={base_redirect} next={safe_next}")
-        return {"auth_url": auth_url, "redirect_uri_used": base_redirect, "state": signed_state}
-    except Exception as e:
-        logger.error(f"Error iniciando login con Google: {e}")
-        raise HTTPException(status_code=500, detail="Error iniciando autenticación")
-        resp.set_cookie(
-            key="access_token",
-            value=auth_token.access_token,
-            max_age=int(timedelta(hours=24).total_seconds()),
-            httponly=False,
-            secure=secure_flag,
-            samesite="Lax",
-            path="/"
-        )
-        return resp
-    except Exception as e:
-        logger.error(f"Error en callback redirect Google: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=400, detail="Error en autenticación con Google (redirect)")
+# Remove duplicate definitions - keeping only the first set
 
 @auth_router.get("/debug/config")
 async def auth_debug_config(request: Request):
@@ -424,6 +350,8 @@ async def google_callback_redirect(
         next_path = (payload or {}).get('n') or '/dashboard'
         if not isinstance(next_path, str) or not next_path.startswith('/'):
             next_path = '/dashboard'
+        
+        # Add timeout and error handling for OAuth token exchange
         try:
             auth_token = await google_auth.authenticate_with_google(code, redirect_override=chosen_redirect)
         except HTTPException as he:
@@ -432,6 +360,43 @@ async def google_callback_redirect(
                 auth_token = await google_auth.authenticate_with_google(code, redirect_override=None)
             else:
                 raise
+        except Exception as e:
+            logger.error(f"[OAuth] Error durante intercambio de token: {e}")
+            # Return error page instead of raising exception to prevent 504
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Error de Autenticación</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+                        .error { color: #d32f2f; background: #ffebee; padding: 20px; border-radius: 8px; max-width: 500px; margin: 0 auto; }
+                    </style>
+                </head>
+                <body>
+                    <div class="error">
+                        <h2>Error de Autenticación</h2>
+                        <p>Hubo un problema procesando su solicitud. Por favor intente de nuevo.</p>
+                        <a href="/login">Volver al Login</a>
+                    </div>
+                </body>
+                </html>
+            """, status_code=500)
+        
+        # Get frontend URL configuration
+        public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip('/')
+        frontend_url = os.getenv("FRONTEND_URL")
+        
+        if not frontend_url:
+            if public_base:
+                frontend_url = public_base
+            else:
+                host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+                proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
+                frontend_url = f"{proto}://{host}"
+        
+        full_redirect_url = f"{frontend_url}{next_path}"
+        
         # Respuesta HTML que guarda el token y redirige
         html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Autenticando...</title></head><body>
 <script>
@@ -442,14 +407,14 @@ async def google_callback_redirect(
     localStorage.setItem('access_token', token);
     sessionStorage.setItem('access_token', token);
     document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
-    console.log('[Auth] Token guardado, redirigiendo a:', {next_path!r});
+    console.log('[Auth] Token guardado, redirigiendo a:', {full_redirect_url!r});
     
     // Verificar que se guardó correctamente
     var stored = localStorage.getItem('access_token');
     if (stored === token) {{
       console.log('[Auth] Token verificado en localStorage');
       setTimeout(function() {{
-        window.location.replace({next_path!r});
+        window.location.replace({full_redirect_url!r});
       }}, 100);
     }} else {{
       console.error('[Auth] Error: token no se guardó correctamente');
@@ -464,6 +429,7 @@ async def google_callback_redirect(
 </script>
 <div>Guardando token y redirigiendo...</div>
 </body></html>"""
+        
         secure_flag = (request.headers.get('x-forwarded-proto') == 'https') or (request.url.scheme == 'https')
         from datetime import timedelta
         resp = HTMLResponse(html)
@@ -477,9 +443,35 @@ async def google_callback_redirect(
             path="/"
         )
         return resp
+        
     except Exception as e:
         logger.error(f"Error en callback redirect Google: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=400, detail="Error en autenticación con Google (redirect)")
+        # Return error page instead of raising exception
+        return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Error de Autenticación</title>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+                    .error { color: #d32f2f; background: #ffebee; padding: 20px; border-radius: 8px; max-width: 500px; margin: 0 auto; }
+                </style>
+            </head>
+            <body>
+                <div class="error">
+                    <h2>Error de Autenticación</h2>
+                    <p>Hubo un problema procesando su solicitud. Por favor intente de nuevo.</p>
+                    <a href="/login">Volver al Login</a>
+                </div>
+            </body>
+            </html>
+        """, status_code=500)
+# ==================== ENDPOINTS DE SUSCRIPCIÓN ====================
+
+@subscription_router.get("/status")
+async def get_subscription_status(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Obtener estado actual de suscripción del usuario"""
+    try:
         # Aquí obtendrías el subscription_id de tu BD
         subscription_id = current_user.get("subscription_id")
         
@@ -661,68 +653,197 @@ async def oauth_redirect_handler(request: Request, state: str = None, code: str 
         
         # Procesar el callback directamente aquí usando la misma lógica del endpoint /api
         if not state or not code:
-            raise HTTPException(status_code=400, detail="Faltan parámetros state o code")
+            logger.error("[OAuth] Faltan parámetros state o code")
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>Faltan parámetros requeridos para la autenticación.</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
 
         # Parsear y validar state
         state_data = _parse_state(state)
         if not state_data:
-            raise HTTPException(status_code=400, detail="State inválido")
+            logger.error("[OAuth] State inválido o expirado")
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>La sesión de autenticación ha expirado.</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
         
         redirect_to = state_data.get("n", "/dashboard")
         
         # Autenticar con Google usando el código
+        # Use the correct redirect URI that matches what Google expects
+        correct_redirect_uri = None
         try:
-            auth_token = await google_auth.authenticate_with_google(code, redirect_override=state_data.get("r"))
+            # First try with the URI Google actually redirected to
+            public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip('/')
+            if public_base:
+                correct_redirect_uri = f"{public_base}/auth/google/callback/redirect"
+            else:
+                host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+                proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
+                correct_redirect_uri = f"{proto}://{host}/auth/google/callback/redirect"
+                
+            logger.info(f"[OAuth] Intentando autenticación con redirect_uri: {correct_redirect_uri}")
+            auth_token = await google_auth.authenticate_with_google(code, redirect_override=correct_redirect_uri)
+            
         except HTTPException as he:
+            logger.warning(f"[OAuth] Error con redirect_uri {correct_redirect_uri}: {he.detail}")
             if 'redirect_uri' in str(getattr(he, 'detail', '')).lower():
                 logger.warning('[OAuth] Retry sin override por mismatch redirect_uri')
-                auth_token = await google_auth.authenticate_with_google(code, redirect_override=None)
+                try:
+                    auth_token = await google_auth.authenticate_with_google(code, redirect_override=None)
+                except Exception as e2:
+                    logger.error(f"[OAuth] Falló también sin override: {e2}")
+                    return HTMLResponse("""
+                        <!DOCTYPE html>
+                        <html>
+                        <head><title>Error de Autenticación</title></head>
+                        <body>
+                            <h2>Error de Autenticación</h2>
+                            <p>No se pudo completar la autenticación con Google. Verifique la configuración OAuth.</p>
+                            <a href="/login">Volver al Login</a>
+                        </body>
+                        </html>
+                    """, status_code=400)
             else:
-                raise
+                logger.error(f"[OAuth] Error de autenticación: {he.detail}")
+                return HTMLResponse("""
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>Error de Autenticación</title></head>
+                    <body>
+                        <h2>Error de Autenticación</h2>
+                        <p>Error durante la autenticación con Google.</p>
+                        <a href="/login">Volver al Login</a>
+                    </body>
+                    </html>
+                """, status_code=400)
+        except Exception as e:
+            logger.error(f"[OAuth] Error inesperado durante autenticación: {e}")
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>Error interno del servidor. Por favor intente de nuevo.</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=500)
         
         logger.info(f"[OAuth] Usuario autenticado exitosamente")
         
+        # Obtener la URL del frontend desde variables de entorno o derivarla del host
+        public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip('/')
+        frontend_url = os.getenv("FRONTEND_URL")
+        
+        if not frontend_url:
+            # Si no hay FRONTEND_URL configurada, usar el mismo dominio pero apuntar al frontend
+            if public_base:
+                frontend_url = public_base
+            else:
+                # Derivar del request actual
+                host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+                proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
+                frontend_url = f"{proto}://{host}"
+        
+        # Construir URL completa de redirección
+        full_redirect_url = f"{frontend_url}{redirect_to}"
+        
+        logger.info(f"[OAuth] Redirigiendo a: {full_redirect_url}")
+        
         # Retornar HTML con script para guardar token y redirigir
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Autenticación Exitosa</title>
-        </head>
-        <body>
-            <div style="text-align: center; margin-top: 50px;">
-                <h2>Autenticación exitosa</h2>
-                <p>Redirigiendo al dashboard...</p>
-            </div>
-            <script>
-                try {{
-                    var token = {auth_token.access_token!r};
-                    console.log('[Auth] Guardando token:', token.substring(0, 20) + '...');
-                    localStorage.setItem('access_token', token);
-                    sessionStorage.setItem('access_token', token);
-                    document.cookie = 'access_token=' + token + '; Path=/; SameSite=Lax';
-                    console.log('[Auth] Token guardado, redirigiendo a:', {redirect_to!r});
-                    
-                    // Verificar que se guardó correctamente
-                    var stored = localStorage.getItem('access_token');
-                    if (stored === token) {{
-                        console.log('[Auth] Token verificado en localStorage');
-                        setTimeout(function() {{
-                            window.location.replace({redirect_to!r});
-                        }}, 100);
-                    }} else {{
-                        console.error('[Auth] Error: token no se guardó correctamente');
-                        document.body.innerHTML = 'Error: token no se guardó correctamente';
-                    }}
-                }} catch(e) {{
-                    console.error('[Auth] Error almacenando token:', e);
-                    document.body.innerHTML = 'Error almacenando token: ' + e;
-                }}
-            </script>
-        </body>
-        </html>
-        """
-        return HTMLResponse(content=html_content)
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Autenticación Exitosa</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }}
+        .spinner {{ border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 20px auto; }}
+        @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+    </style>
+</head>
+<body>
+    <div>
+        <h2>Autenticación exitosa</h2>
+        <div class="spinner"></div>
+        <p>Guardando credenciales y redirigiendo...</p>
+    </div>
+    <script>
+        console.log('[Auth] Iniciando proceso de autenticación');
+        
+        try {{
+            var token = {auth_token.access_token!r};
+            var redirectUrl = {full_redirect_url!r};
+            
+            console.log('[Auth] Token recibido:', token.substring(0, 20) + '...');
+            console.log('[Auth] Redirigiendo a:', redirectUrl);
+            
+            // Guardar token en todas las formas posibles
+            localStorage.setItem('access_token', token);
+            sessionStorage.setItem('access_token', token);
+            
+            // Cookie con configuración más permisiva
+            var cookieStr = 'access_token=' + token + '; Path=/; SameSite=Lax; Max-Age=86400';
+            if (location.protocol === 'https:') {{
+                cookieStr += '; Secure';
+            }}
+            document.cookie = cookieStr;
+            
+            console.log('[Auth] Token guardado en localStorage, sessionStorage y cookie');
+            
+            // Verificar que se guardó
+            var stored = localStorage.getItem('access_token');
+            if (stored === token) {{
+                console.log('[Auth] Token verificado exitosamente');
+                
+                // Redirigir inmediatamente
+                console.log('[Auth] Iniciando redirección...');
+                window.location.href = redirectUrl;
+                
+            }} else {{
+                console.error('[Auth] Error: token no se guardó correctamente');
+                throw new Error('Token no se guardó en localStorage');
+            }}
+            
+        }} catch(e) {{
+            console.error('[Auth] Error procesando autenticación:', e);
+            document.body.innerHTML = '<h2>Error de Autenticación</h2><p>Error: ' + e.message + '</p><p><a href="{frontend_url}/login">Intentar de nuevo</a></p>';
+        }}
+    </script>
+</body>
+</html>"""
+
+        # Set cookie on response
+        secure_flag = (request.headers.get('x-forwarded-proto') == 'https') or (request.url.scheme == 'https')
+        from datetime import timedelta
+        resp = HTMLResponse(content=html_content)
+        resp.set_cookie(
+            key="access_token",
+            value=auth_token.access_token,
+            max_age=int(timedelta(hours=24).total_seconds()),
+            httponly=False,
+            secure=secure_flag,
+            samesite="Lax",
+            path="/"
+        )
+        return resp
         
     except Exception as e:
         logger.error(f"[OAuth] Error en redirección: {e}")
