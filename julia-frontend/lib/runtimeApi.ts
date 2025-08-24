@@ -1,23 +1,7 @@
-// Central helper to build API base URL without hardcoding localhost
-// Always prefer NEXT_PUBLIC_API_URL if set; otherwise use current origin
+// Central helper to build API base URL - hardcoded for production
 export function apiBase(): string {
-  // Primera prioridad: variable de entorno compilada en tiempo de build
-  let envUrl = process.env.NEXT_PUBLIC_API_URL || '';
-  if (envUrl) {
-    envUrl = envUrl.replace(/\/$/, '');
-    // Si no es localhost, usar directamente
-    if (!/localhost|127\./i.test(envUrl)) {
-      return envUrl;
-    }
-  }
-  
-  // Fallback para desarrollo o cuando no hay NEXT_PUBLIC_API_URL válida
-  if (typeof window !== 'undefined') {
-    return window.location.origin.replace(/\/$/, '');
-  }
-  
-  // Durante build/SSR: usar relativo
-  return '';
+  // Directly return the production API URL
+  return 'https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io';
 }
 
 // Convenience to build API root (adds /api if not already)
