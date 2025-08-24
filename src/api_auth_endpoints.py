@@ -29,7 +29,7 @@ oauth_redirect_router = APIRouter(prefix="/auth", tags=["OAuth Redirects"])
 
 # ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
-STATE_MAX_AGE = 300  # segundos
+STATE_MAX_AGE = 1800  # 30 minutos para dar más tiempo
 
 def _oauth_state_secret() -> bytes:
     return (getattr(google_auth, 'JWT_SECRET', None) or os.getenv('JWT_SECRET', 'dev_secret')).encode()
@@ -95,7 +95,8 @@ async def google_login(
                 host = f"{raw_host}:{port}"
             else:
                 host = raw_host
-        base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
+        # Usar el redirect URI estándar que está registrado en Google OAuth
+        base_redirect = f"{proto}://{host}/auth/callback"
         safe_next = next if isinstance(next, str) and next.startswith('/') else '/dashboard'
         signed_state = _sign_state({"r": base_redirect, "n": safe_next, "t": int(time.time())})
         auth_url = google_auth.get_authorization_url(state=signed_state, redirect_override=base_redirect)
@@ -640,6 +641,115 @@ async def get_usage_stats(current_user: Dict[str, Any] = Depends(get_current_use
         raise HTTPException(status_code=500, detail="Error obteniendo estadísticas")
 
 # ==================== ENDPOINTS DE REDIRECCIÓN OAUTH ====================
+
+@oauth_redirect_router.get("/callback")
+async def oauth_callback_handler(request: Request, state: str = None, code: str = None):
+    """
+    Endpoint estándar para el callback de Google OAuth - /auth/callback
+    Este es el endpoint que Google espera según la configuración GOOGLE_REDIRECT_URI
+    """
+    try:
+        logger.info(f"[OAuth] Callback capturado en /auth/callback")
+        logger.info(f"[OAuth] State: {state}, Code: {code[:20]}..." if code else "No code")
+        
+        # Procesar el callback directamente aquí
+        if not state or not code:
+            logger.error("[OAuth] Faltan parámetros state o code")
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>Faltan parámetros requeridos para la autenticación.</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
+
+        # Parsear y validar state
+        state_data = _parse_state(state)
+        if not state_data:
+            logger.error("[OAuth] State inválido o expirado")
+            return HTMLResponse("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>La sesión de autenticación ha expirado.</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
+        
+        redirect_to = state_data.get("n", "/dashboard")
+        
+        # Autenticar con Google usando el redirect URI correcto
+        try:
+            # Use the standard /auth/callback redirect URI that Google expects
+            public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip('/')
+            if public_base:
+                correct_redirect_uri = f"{public_base}/auth/callback"
+            else:
+                host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+                proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
+                correct_redirect_uri = f"{proto}://{host}/auth/callback"
+                
+            logger.info(f"[OAuth] Intentando autenticación con redirect_uri: {correct_redirect_uri}")
+            auth_token = await google_auth.authenticate_with_google(code, redirect_override=correct_redirect_uri)
+            
+            # Generar HTML de respuesta que almacena el token y redirige al frontend
+            frontend_domain = "https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io"
+            html_response = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Autenticación Exitosa</title>
+                <script>
+                    // Almacenar token en localStorage
+                    localStorage.setItem('auth_token', '{auth_token.access_token}');
+                    localStorage.setItem('user_data', JSON.stringify({json.dumps(auth_token.user)}));
+                    
+                    // Redirigir al dashboard del frontend
+                    window.location.href = '{frontend_domain}{redirect_to}';
+                </script>
+            </head>
+            <body>
+                <p>Autenticación exitosa, redirigiendo...</p>
+            </body>
+            </html>
+            """
+            
+            return HTMLResponse(html_response)
+            
+        except Exception as auth_error:
+            logger.error(f"[OAuth] Error de autenticación: {auth_error}")
+            return HTMLResponse(f"""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error de Autenticación</title></head>
+                <body>
+                    <h2>Error de Autenticación</h2>
+                    <p>No se pudo completar la autenticación: {str(auth_error)}</p>
+                    <a href="/login">Volver al Login</a>
+                </body>
+                </html>
+            """, status_code=400)
+            
+    except Exception as e:
+        logger.error(f"[OAuth] Error en callback: {e}")
+        return HTMLResponse("""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Error</title></head>
+            <body>
+                <h2>Error</h2>
+                <p>Ha ocurrido un error inesperado.</p>
+                <a href="/login">Volver al Login</a>
+            </body>
+            </html>
+        """, status_code=500)
 
 @oauth_redirect_router.get("/google/callback/redirect")
 async def oauth_redirect_handler(request: Request, state: str = None, code: str = None):

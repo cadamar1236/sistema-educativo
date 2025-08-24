@@ -107,7 +107,7 @@ class GoogleAuthService:
                 # Log detallado para depuración (NO incluye secrets)
                 safe_payload = {
                     "status": response.status_code,
-                    "redirect_uri_used": self.redirect_uri,
+                    "redirect_uri_used": redirect_override or self.redirect_uri,
                     "has_client_id": bool(self.client_id),
                     "error_body": None
                 }
