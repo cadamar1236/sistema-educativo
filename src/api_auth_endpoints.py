@@ -65,22 +65,37 @@ async def google_login(
     """Login unificado Google: siempre usa callback backend /api/auth/google/callback/redirect.
     Devuelve auth_url y state firmado que incluye redirect y next interno."""
     try:
-        raw_host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
-        port = request.url.port
-        proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-        if prefer_localhost and raw_host.startswith("127."):
-            raw_host = "localhost"
-        if force_http_loopback and (raw_host.startswith("localhost") or raw_host.startswith("127.")):
-            proto = "http"
-        if ':' not in raw_host and port and port not in (80, 443):
-            host = f"{raw_host}:{port}"
+        public_base = os.getenv("PUBLIC_BASE_URL")  # ej: https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io
+        if public_base:
+            # Normalizar sin slash final
+            public_base = public_base.rstrip('/')
+            from urllib.parse import urlparse
+            pu = urlparse(public_base)
+            proto = pu.scheme or 'https'
+            host = pu.netloc
         else:
-            host = raw_host
+            # Cabeceras en orden de preferencia
+            raw_host = (request.headers.get("x-forwarded-host") or
+                        request.headers.get("x-original-host") or
+                        request.headers.get("host") or
+                        request.url.hostname or "")
+            proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
+            port = request.url.port
+            # Solo forzar localhost en loopback genuino (no en producción)
+            if prefer_localhost and raw_host.startswith("127."):
+                raw_host = "localhost"
+            # No forzar http si tenemos dominio público (contiene un punto y no es localhost)
+            if force_http_loopback and (raw_host.startswith("localhost") or raw_host.startswith("127.")) and '.' not in raw_host:
+                proto = "http"
+            if ':' not in raw_host and port and port not in (80, 443):
+                host = f"{raw_host}:{port}"
+            else:
+                host = raw_host
         base_redirect = f"{proto}://{host}/api/auth/google/callback/redirect"
         safe_next = next if isinstance(next, str) and next.startswith('/') else '/dashboard'
         signed_state = _sign_state({"r": base_redirect, "n": safe_next, "t": int(time.time())})
         auth_url = google_auth.get_authorization_url(state=signed_state, redirect_override=base_redirect)
-        logger.info(f"[oauth] login host={host} redirect={base_redirect} next={safe_next}")
+        logger.info(f"[oauth] login host={host} redirect={base_redirect} next={safe_next} public_base={'yes' if public_base else 'no'}")
         return {"auth_url": auth_url, "redirect_uri_used": base_redirect, "state": signed_state}
     except Exception as e:
         logger.error(f"Error iniciando login con Google: {e}")
