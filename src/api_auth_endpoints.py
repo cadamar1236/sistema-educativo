@@ -973,102 +973,36 @@ async def oauth_redirect_handler(request: Request, state: str = None, code: str 
         
         logger.info(f"[OAuth] Usuario autenticado exitosamente")
         
-        # Obtener la URL del frontend desde variables de entorno o derivarla del host
-        public_base = os.getenv("PUBLIC_BASE_URL", "").rstrip('/')
-        frontend_url = os.getenv("FRONTEND_URL")
-        
-        if not frontend_url:
-            # Si no hay FRONTEND_URL configurada, usar el mismo dominio pero apuntar al frontend
-            if public_base:
-                frontend_url = public_base
-            else:
-                # Derivar del request actual
-                host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
-                proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
-                frontend_url = f"{proto}://{host}"
-        
-        # Construir URL completa de redirección
-        full_redirect_url = f"{frontend_url}{redirect_to}"
+        # Simplificar: usar dominio actual y redirección básica
+        host = request.headers.get("x-forwarded-host") or request.url.hostname or ""
+        proto = request.headers.get("x-forwarded-proto") or request.url.scheme or 'https'
+        base_url = f"{proto}://{host}"
+        full_redirect_url = f"{base_url}{redirect_to}"
         
         logger.info(f"[OAuth] Redirigiendo a: {full_redirect_url}")
         
-        # Retornar HTML con script para guardar token y redirigir
+        # HTML simplificado para evitar timeouts
         html_content = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Autenticación Exitosa</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }}
-        .spinner {{ border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 20px auto; }}
-        @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-    </style>
+    <title>Login Exitoso</title>
+    <meta http-equiv="refresh" content="2;url={full_redirect_url}">
 </head>
 <body>
-    <div>
-        <h2>Autenticación exitosa</h2>
-        <div class="spinner"></div>
-        <p>Guardando credenciales y redirigiendo...</p>
-    </div>
+    <h2>✅ Autenticación exitosa</h2>
+    <p>Redirigiendo...</p>
     <script>
-        console.log('[Auth] Iniciando proceso de autenticación');
-        
-        try {{
-            var token = {auth_token.access_token!r};
-            var redirectUrl = {full_redirect_url!r};
-            
-            console.log('[Auth] Token recibido:', token.substring(0, 20) + '...');
-            console.log('[Auth] Redirigiendo a:', redirectUrl);
-            
-            // Guardar token en todas las formas posibles
-            localStorage.setItem('access_token', token);
-            sessionStorage.setItem('access_token', token);
-            
-            // Cookie con configuración más permisiva
-            var cookieStr = 'access_token=' + token + '; Path=/; SameSite=Lax; Max-Age=86400';
-            if (location.protocol === 'https:') {{
-                cookieStr += '; Secure';
-            }}
-            document.cookie = cookieStr;
-            
-            console.log('[Auth] Token guardado en localStorage, sessionStorage y cookie');
-            
-            // Verificar que se guardó
-            var stored = localStorage.getItem('access_token');
-            if (stored === token) {{
-                console.log('[Auth] Token verificado exitosamente');
-                
-                // Redirigir inmediatamente
-                console.log('[Auth] Iniciando redirección...');
-                window.location.href = redirectUrl;
-                
-            }} else {{
-                console.error('[Auth] Error: token no se guardó correctamente');
-                throw new Error('Token no se guardó en localStorage');
-            }}
-            
-        }} catch(e) {{
-            console.error('[Auth] Error procesando autenticación:', e);
-            document.body.innerHTML = '<h2>Error de Autenticación</h2><p>Error: ' + e.message + '</p><p><a href="{frontend_url}/login">Intentar de nuevo</a></p>';
-        }}
+        // Guardar token de forma simple
+        localStorage.setItem('access_token', {auth_token.access_token!r});
+        // Redirigir inmediatamente
+        setTimeout(() => window.location.href = {full_redirect_url!r}, 1000);
     </script>
 </body>
 </html>"""
 
-        # Set cookie on response
-        secure_flag = (request.headers.get('x-forwarded-proto') == 'https') or (request.url.scheme == 'https')
-        from datetime import timedelta
-        resp = HTMLResponse(content=html_content)
-        resp.set_cookie(
-            key="access_token",
-            value=auth_token.access_token,
-            max_age=int(timedelta(hours=24).total_seconds()),
-            httponly=False,
-            secure=secure_flag,
-            samesite="Lax",
-            path="/"
-        )
-        return resp
+        logger.info(f"[OAuth] Enviando respuesta HTML simplificada")
+        return HTMLResponse(content=html_content)
         
     except Exception as e:
         logger.error(f"[OAuth] Error en redirección: {e}")
