@@ -2,7 +2,7 @@
 Endpoints de autenticación con Google y suscripciones con Stripe
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, HTMLResponse
 from typing import Dict, Any, Optional
 import hmac, hashlib, base64, json, time
@@ -293,13 +293,48 @@ async def debug_token_check(request: Request):
     }
 
 @auth_router.get("/me")
-async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """Obtener información del usuario actual"""
-    return {
-        "user": current_user,
-        "subscription_tier": current_user.get("subscription_tier", "free"),
-        "role": current_user.get("role", "student")
-    }
+async def get_current_user_info(request: Request):
+    """Obtener información del usuario actual - con múltiples formas de autenticación"""
+    token = None
+    
+    # 1. Intentar desde Authorization header
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    
+    # 2. Si no hay header, intentar desde cookie
+    if not token:
+        token = request.cookies.get("access_token")
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de acceso requerido",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    try:
+        # Verificar el token JWT
+        payload = google_auth.verify_jwt_token(token)
+        return {
+            "user": {
+                "id": payload["sub"],
+                "email": payload["email"], 
+                "name": payload["name"],
+                "picture": payload.get("picture", ""),
+                "subscription_tier": payload.get("subscription_tier", "free"),
+                "role": payload.get("role", "student")
+            },
+            "subscription_tier": payload.get("subscription_tier", "free"),
+            "role": payload.get("role", "student")
+        }
+    except Exception as e:
+        logger.error(f"Error verificando token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
 
 @auth_router.get("/google/callback/redirect")
 async def google_callback_redirect(
