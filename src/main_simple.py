@@ -1591,28 +1591,32 @@ async def get_dashboard_stats(student_id: str = "student_001"):
     Obtiene estadísticas completas del dashboard del estudiante
     
     Args:
-        student_id: ID del estudiante
+        student_id: ID del estudiante o email
         
     Returns:
         Estadísticas completas del dashboard incluyendo progreso, actividades, logros, etc.
     """
     try:
+        # URL decode el student_id en caso de que sea un email
+        import urllib.parse
+        decoded_student_id = urllib.parse.unquote(student_id)
+        
         r = _get_redis()
-        key = f"dashboard_stats:{student_id}"
+        key = f"dashboard_stats:{decoded_student_id}"
         if r:
             cached = r.get(key)
             if cached:
                 import json as _json
                 data = _json.loads(cached)
                 data["success"] = True
-                data["student_id"] = student_id
+                data["student_id"] = decoded_student_id
                 data["timestamp"] = datetime.now().isoformat()
                 data["cache"] = True
                 return JSONResponse(content=data)
 
-        dashboard_stats = student_stats_service.get_dashboard_stats(student_id)
+        dashboard_stats = student_stats_service.get_dashboard_stats(decoded_student_id)
         dashboard_stats["success"] = True
-        dashboard_stats["student_id"] = student_id
+        dashboard_stats["student_id"] = decoded_student_id
         dashboard_stats["timestamp"] = datetime.now().isoformat()
         dashboard_stats["cache"] = False
         if r:
