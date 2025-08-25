@@ -80,44 +80,47 @@ class DatabaseStudentStatsService:
         try:
             with get_session() as session:
                 # Registrar la actividad
-                activity_record = StudentActivity(
-                    id=str(uuid.uuid4()),
-                    student_id=student_id,
-                    activity_type=activity.get("type", "unknown"),
-                    activity_data=activity,
-                    endpoint=activity.get("endpoint"),
-                    agent_type=activity.get("agent_type"),
-                    duration_seconds=activity.get("duration_seconds"),
-                    response_status=activity.get("response_status"),
-                    date=datetime.now().strftime("%Y-%m-%d"),
-                    hour=datetime.now().hour
-                )
-                session.add(activity_record)
+                    # Usar email real si está disponible en la actividad
+                    real_email = activity.get("user_email") or activity.get("email") or student_id
+                    activity_record = StudentActivity(
+                        id=str(uuid.uuid4()),
+                        student_id=real_email,
+                        activity_type=activity.get("type", "unknown"),
+                        activity_data=activity,
+                        endpoint=activity.get("endpoint"),
+                        agent_type=activity.get("agent_type"),
+                        duration_seconds=activity.get("duration_seconds"),
+                        response_status=activity.get("response_status"),
+                        date=datetime.now().strftime("%Y-%m-%d"),
+                        hour=datetime.now().hour
+                    )
+                    session.add(activity_record)
                 
-                # Actualizar estadísticas del estudiante
-                stats = self.get_or_create_student_stats(student_id, activity.get("user_email"))
+                    # Actualizar estadísticas del estudiante
+                    stats = self.get_or_create_student_stats(real_email, real_email)
                 
-                # Incrementar contadores según el tipo de actividad
-                if activity.get("type") == "agent_interaction":
-                    stats.exercises_done += 1
-                    stats.total_points += 5  # 5 puntos por interacción
+                    # Incrementar contadores según el tipo de actividad
+                    if activity.get("type") in ["agent_interaction", "chat_session"]:
+                        stats.exercises_done += 1
+                        # Sumar puntos si vienen en la actividad, si no, sumar 5 por defecto
+                        stats.total_points += int(activity.get("points_earned", 5))
                 
-                # Actualizar tiempo total si está disponible
-                if activity.get("duration_seconds"):
-                    stats.total_time_spent += int(activity.get("duration_seconds", 0) / 60)
+                    # Actualizar tiempo total si está disponible
+                    if activity.get("duration_seconds"):
+                        stats.total_time_spent += int(activity.get("duration_seconds", 0) / 60)
                 
-                # Actualizar timestamp de última actividad
-                stats.last_activity_at = datetime.now()
-                stats.updated_at = datetime.now()
+                    # Actualizar timestamp de última actividad
+                    stats.last_activity_at = datetime.now()
+                    stats.updated_at = datetime.now()
                 
-                # Calcular nivel basado en puntos (cada 100 puntos = 1 nivel)
-                stats.level = max(1, stats.total_points // 100 + 1)
+                    # Calcular nivel basado en puntos (cada 100 puntos = 1 nivel)
+                    stats.level = max(1, stats.total_points // 100 + 1)
                 
-                session.add(stats)
-                session.commit()
+                    session.add(stats)
+                    session.commit()
                 
-                print(f"✅ Actividad registrada para {student_id}: {activity.get('type')}")
-                return True
+                    print(f"✅ Actividad registrada para {real_email}: {activity.get('type')}")
+                    return True
                 
         except Exception as e:
             print(f"❌ Error actualizando actividad del estudiante: {e}")
