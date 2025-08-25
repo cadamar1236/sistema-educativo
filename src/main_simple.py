@@ -397,19 +397,16 @@ async def get_dashboard_stats_early(student_id: str = "student_001"):
 
         # Intentar obtener estadísticas reales del servicio
         try:
-            # Si es un email, convertirlo a un ID válido para el servicio
-            if "@" in decoded_student_id:
-                # Crear un ID único basado en el email
-                service_id = decoded_student_id.replace("@", "_at_").replace(".", "_dot_")
-            else:
-                service_id = decoded_student_id
+            # NO normalizar el email, usar directamente ya que ahora guardamos con el email real
+            service_id = decoded_student_id
                 
             dashboard_stats = student_stats_service.get_dashboard_stats(service_id)
+            print(f"📈 Dashboard: Consultando stats para {service_id}")
             
             # Asegurarse de que el email original esté incluido en la respuesta
             if "student" in dashboard_stats and "@" in decoded_student_id:
                 dashboard_stats["student"]["email"] = decoded_student_id
-                dashboard_stats["student"]["id"] = service_id
+                dashboard_stats["student"]["id"] = decoded_student_id
                 
             dashboard_stats["success"] = True
             dashboard_stats["student_id"] = decoded_student_id
@@ -578,8 +575,8 @@ async def track_requests(request, call_next):
             
             # Determinar el student_id
             if user_info and "email" in user_info:
-                # Usar el email como identificador, convertido a formato válido para el servicio
-                student_id = normalize_student_id(user_info["email"])
+                # Usar el email directamente SIN normalizar
+                student_id = user_info["email"]
                 student_email = user_info["email"]
                 print(f"🔑 Middleware: JWT - Usuario autenticado: {student_email}")
             else:
@@ -1826,7 +1823,7 @@ async def get_dashboard_stats(student_id: str = "student_001"):
             # Asegurarse de que el email original esté incluido en la respuesta
             if "student" in dashboard_stats and "@" in decoded_student_id:
                 dashboard_stats["student"]["email"] = decoded_student_id
-                dashboard_stats["student"]["id"] = service_id
+                dashboard_stats["student"]["id"] = decoded_student_id
                 
             dashboard_stats["success"] = True
             dashboard_stats["student_id"] = decoded_student_id
