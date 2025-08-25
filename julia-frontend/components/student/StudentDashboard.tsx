@@ -562,12 +562,18 @@ export default function StudentDashboard({ studentId }: StudentDashboardProps) {
           }>
             <MultiAgentChat 
               onActivityUpdate={(activity) => {
-                // Actualizar estadísticas cuando el estudiante interactúe
+                // Log para depuración
+                console.log('Enviando actividad multiagente:', {
+                  ...activity,
+                  type: 'chat_session',
+                  duration_minutes: 15,
+                  user_email: user?.email
+                });
                 updateActivity({
                   type: 'chat_session',
                   duration_minutes: 15, // Estimado
                   ...activity
-                })
+                });
               }}
             />
           </Tab>
@@ -580,12 +586,18 @@ export default function StudentDashboard({ studentId }: StudentDashboardProps) {
           }>
             <AgentChat 
               onActivityUpdate={(activity) => {
-                // Actualizar estadísticas cuando el estudiante interactúe
+                // Log para depuración
+                console.log('Enviando actividad agente:', {
+                  ...activity,
+                  type: 'chat_session',
+                  duration_minutes: 10,
+                  user_email: user?.email
+                });
                 updateActivity({
                   type: 'chat_session',
                   duration_minutes: 10, // Estimado
                   ...activity
-                })
+                });
               }}
             />
           </Tab>
