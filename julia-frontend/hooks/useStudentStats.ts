@@ -35,11 +35,20 @@ interface UseStudentStatsReturn {
 
 export function useStudentStats(options: UseStudentStatsOptions = {}): UseStudentStatsReturn {
   const {
-  studentId,
+    studentId,
     autoRefresh = true,
     refreshInterval = 300000, // 5 minutos por defecto
     onError
   } = options;
+  // Obtener usuario autenticado
+  // Importa el hook de autenticación
+  // Si ya está importado en el archivo, úsalo aquí
+  let user: any = undefined;
+  try {
+    // Evita error si el hook no está disponible en contexto
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    user = require('@/hooks/useAuth').useAuth()?.user;
+  } catch {}
 
   // Estados
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
@@ -97,20 +106,20 @@ export function useStudentStats(options: UseStudentStatsOptions = {}): UseStuden
   }) => {
     try {
       if (!studentId) return;
-      await statsService.updateStudentActivity(studentId, activity);
-  await refreshStats({ force: true });
-      console.log('✅ Actividad actualizada:', activity);
+      // Incluye el email del usuario en la actividad
+      const activityWithEmail = { ...activity, user_email: user?.email || studentId };
+      await statsService.updateStudentActivity(studentId, activityWithEmail);
+      await refreshStats({ force: true });
+      console.log('✅ Actividad actualizada:', activityWithEmail);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error actualizando actividad';
       setError(errorMessage);
-      
       if (onError) {
         onError(err instanceof Error ? err : new Error(errorMessage));
       }
-      
       console.error('❌ Error actualizando actividad:', err);
     }
-  }, [studentId, refreshStats, onError]);
+  }, [studentId, refreshStats, onError, user]);
 
   // Efecto para carga inicial
   useEffect(() => {
