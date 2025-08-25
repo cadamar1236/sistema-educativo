@@ -46,20 +46,21 @@ export default function StudentDashboard({ studentId }: StudentDashboardProps) {
   // Si se pasa explícito via prop, lo respetamos. No caemos a user.id para evitar la primera petición indeseada.
   const effectiveStudentId = studentId || user?.email || undefined
   const [selectedTab, setSelectedTab] = useState('dashboard')
-  
+
   // Hook para obtener estadísticas reales
   const statsHookEnabled = !!effectiveStudentId
-  const { 
-    dashboardStats, 
-    studentStats, 
-    isLoading, 
-    error, 
+  const {
+    dashboardStats,
+    studentStats,
+    isLoading,
+    error,
     lastUpdated,
     refreshStats,
     updateActivity,
-    clearError 
-  } = useStudentStats(statsHookEnabled ? { 
+    clearError
+  } = useStudentStats(statsHookEnabled ? {
     studentId: effectiveStudentId,
+    userEmail: user?.email,
     autoRefresh: true,
     refreshInterval: 300000 // 5 minutos
   } : { studentId: '__disabled__', autoRefresh: false, refreshInterval: 99999999 } as any)

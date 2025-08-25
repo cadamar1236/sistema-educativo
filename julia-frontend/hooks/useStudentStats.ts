@@ -8,6 +8,7 @@ import { statsService, DashboardStats, StudentStats } from '../lib/statsService'
 
 interface UseStudentStatsOptions {
   studentId?: string; // si falta, el hook espera a que exista
+  userEmail?: string; // email del usuario autenticado
   autoRefresh?: boolean;
   refreshInterval?: number; // en milisegundos
   onError?: (error: Error) => void;
@@ -36,6 +37,7 @@ interface UseStudentStatsReturn {
 export function useStudentStats(options: UseStudentStatsOptions = {}): UseStudentStatsReturn {
   const {
     studentId,
+    userEmail,
     autoRefresh = true,
     refreshInterval = 300000, // 5 minutos por defecto
     onError
@@ -107,7 +109,7 @@ export function useStudentStats(options: UseStudentStatsOptions = {}): UseStuden
     try {
       if (!studentId) return;
       // Incluye el email del usuario en la actividad
-      const activityWithEmail = { ...activity, user_email: user?.email || studentId };
+      const activityWithEmail = { ...activity, user_email: userEmail || studentId };
       await statsService.updateStudentActivity(studentId, activityWithEmail);
       await refreshStats({ force: true });
       console.log('✅ Actividad actualizada:', activityWithEmail);
@@ -119,7 +121,7 @@ export function useStudentStats(options: UseStudentStatsOptions = {}): UseStuden
       }
       console.error('❌ Error actualizando actividad:', err);
     }
-  }, [studentId, refreshStats, onError, user]);
+  }, [studentId, refreshStats, onError, userEmail]);
 
   // Efecto para carga inicial
   useEffect(() => {
