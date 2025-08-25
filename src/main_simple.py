@@ -28,6 +28,40 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Importaciones básicas
 from src.config import settings
 from src.models import AgentType
+
+# Función auxiliar para extraer información de usuario desde el token
+def extract_user_from_request(request) -> Optional[Dict[str, Any]]:
+    """Extrae información del usuario desde el token JWT en el header Authorization"""
+    try:
+        # Buscar el token en el header Authorization
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return None
+            
+        token = auth_header.split(" ")[1]
+        
+        # Importar el servicio de autenticación
+        try:
+            from src.auth.google_auth import GoogleAuthService
+        except ImportError:
+            try:
+                from auth.google_auth import GoogleAuthService
+            except ImportError:
+                return None
+        
+        auth_service = GoogleAuthService()
+        payload = auth_service.verify_jwt_token(token)
+        return payload
+        
+    except Exception as e:
+        # Si no se puede extraer el usuario, devolver None silenciosamente
+        return None
+
+def normalize_student_id(identifier: str) -> str:
+    """Normaliza un email o ID a un formato válido para el servicio de estadísticas"""
+    if "@" in identifier:
+        return identifier.replace("@", "_at_").replace(".", "_dot_")
+    return identifier
 from src.services.student_stats_service import student_stats_service
 from src.services.assignment_service import assignment_service
 
@@ -270,6 +304,15 @@ def debug_remount_static():
     _mount_static_exports()
     after = {"_next": _is_route_mounted('/_next'), "static": _is_route_mounted('/static')}
     return {"before": before, "after": after, "exists": {"static": os.path.isdir(FRONTEND_EXPORT_DIR), "_next": os.path.isdir(NEXT_ASSETS_DIR)}}
+
+@app.post("/api/agents/test-tracking")
+async def test_tracking_endpoint():
+    """Endpoint de prueba para verificar que el tracking automático funcione"""
+    return JSONResponse(content={
+        "success": True, 
+        "message": "Tracking test endpoint called",
+        "timestamp": datetime.now().isoformat()
+    })
 
 @app.get("/debug/static-status")
 def debug_static_status():
@@ -517,27 +560,43 @@ async def track_requests(request, call_next):
         try:
             process_time = time.time() - start_time
             
-            # Intentar extraer student_id del request
-            student_id = "student_001"  # Default
+            # Intentar extraer información del usuario autenticado
+            user_info = extract_user_from_request(request)
             
-            # Registrar interacción genérica
+            # Determinar el student_id
+            if user_info and "email" in user_info:
+                # Usar el email como identificador, convertido a formato válido para el servicio
+                student_id = normalize_student_id(user_info["email"])
+                student_email = user_info["email"]
+            else:
+                # Fallback al default
+                student_id = "student_001"
+                student_email = "unknown@example.com"
+            
+            # Registrar interacción con más detalles
             activity = {
-                "type": "api_interaction",
+                "type": "agent_interaction",
                 "endpoint": str(request.url.path),
                 "method": request.method,
-                "duration_seconds": process_time,
+                "duration_seconds": round(process_time, 3),
                 "response_status": response.status_code,
                 "hour": datetime.now().hour,
-                "auto_tracked": True
+                "user_email": student_email,
+                "auto_tracked": True,
+                # Detectar qué tipo de agente se usó
+                "agent_type": request.url.path.split("/")[-1] if "/api/agents/" in str(request.url.path) else "unknown"
             }
             
             # Solo registrar si la respuesta fue exitosa
             if response.status_code == 200:
                 student_stats_service.update_student_activity(student_id, activity)
+                print(f"✅ Actividad registrada para {student_email}: {activity['agent_type']}")
+            else:
+                print(f"❌ No se registró actividad por status code: {response.status_code}")
                 
         except Exception as e:
             # No interrumpir el flujo si falla el tracking
-            print(f"Error en tracking automático: {e}")
+            print(f"❌ Error en tracking automático: {e}")
     
     return response
 
@@ -1732,12 +1791,8 @@ async def get_dashboard_stats(student_id: str = "student_001"):
 
         # Intentar obtener estadísticas reales del servicio
         try:
-            # Si es un email, convertirlo a un ID válido para el servicio
-            if "@" in decoded_student_id:
-                # Crear un ID único basado en el email
-                service_id = decoded_student_id.replace("@", "_at_").replace(".", "_dot_")
-            else:
-                service_id = decoded_student_id
+            # Normalizar el ID usando la misma función que el tracking
+            service_id = normalize_student_id(decoded_student_id)
                 
             dashboard_stats = student_stats_service.get_dashboard_stats(service_id)
             
