@@ -62,7 +62,20 @@ def normalize_student_id(identifier: str) -> str:
     if "@" in identifier:
         return identifier.replace("@", "_at_").replace(".", "_dot_")
     return identifier
-from src.services.student_stats_service import student_stats_service
+
+# Servicios - Priorizar base de datos PostgreSQL
+try:
+    from src.services.database_student_stats_service import DatabaseStudentStatsService
+    student_stats_service = DatabaseStudentStatsService()
+    print("✅ Usando servicio de estadísticas con PostgreSQL")
+except ImportError as e:
+    try:
+        from src.services.student_stats_service import student_stats_service
+        print("⚠️ Usando servicio de estadísticas con archivos JSON (fallback)")
+    except ImportError:
+        print("❌ No se pudo cargar ningún servicio de estadísticas")
+        student_stats_service = None
+
 from src.services.assignment_service import assignment_service
 
 # Importar agentes reales
