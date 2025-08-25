@@ -581,10 +581,12 @@ async def track_requests(request, call_next):
                 # Usar el email como identificador, convertido a formato válido para el servicio
                 student_id = normalize_student_id(user_info["email"])
                 student_email = user_info["email"]
+                print(f"🔑 Middleware: JWT - Usuario autenticado: {student_email}")
             else:
                 # Fallback al default
                 student_id = "student_001"
                 student_email = "unknown@example.com"
+                print(f"⚠️ Middleware: Sin JWT, usando defaults: {student_email}")
             
             # Registrar interacción con más detalles
             activity = {
@@ -1272,7 +1274,18 @@ async def unified_chat(request_data: dict):
         # Aceptar ambos formatos de parámetros para compatibilidad
         selected_agents = request_data.get("selected_agents") or request_data.get("selectedAgents", [])
         chat_mode = request_data.get("chat_mode") or request_data.get("chatMode", "individual")
-        student_id = request_data.get("student_id", "student_001")  # Agregar student_id
+        
+        # Extraer student_id del request directo o del contexto, priorizando el email
+        context = request_data.get("context", {})
+        student_id = (
+            context.get("user_email") or  # Priorizar el email del usuario
+            request_data.get("student_id") or 
+            context.get("student_id") or 
+            context.get("user_id") or 
+            "student_001"
+        )
+        
+        print(f"🔑 Unified chat - Student ID detectado: {student_id}")
         
         if not message:
             raise HTTPException(status_code=400, detail="Mensaje requerido")
@@ -1350,7 +1363,8 @@ async def unified_chat(request_data: dict):
             "points_earned": total_points,
             "hour": start_time.hour,
             "agents_count": len(selected_agents),
-            "is_multi_agent": len(selected_agents) > 1
+            "is_multi_agent": len(selected_agents) > 1,
+            "user_email": student_id  # Incluir el email del usuario para mejor tracking
         }
         
         student_stats_service.update_student_activity(student_id, activity)

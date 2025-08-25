@@ -99,7 +99,7 @@ interface MultiAgentChatProps {
 
 export default function MultiAgentChat({ onActivityUpdate }: MultiAgentChatProps) {
   const { user } = useAuth() as any
-  const studentId = user?.id
+  const studentId = user?.email || user?.id  // Preferir email sobre ID
   // Función para limpiar códigos ANSI de escape
   const cleanAnsiCodes = (text: string): string => {
     if (typeof text !== 'string') return text;
@@ -205,6 +205,8 @@ Todos los **agentes educativos** están conectados y preparados para colaborar e
           chat_mode: chatMode,
           context: {
             student_id: studentId,
+            user_email: user?.email,
+            user_id: user?.id,
             timestamp: new Date().toISOString(),
             multiagent_mode: true
           }
