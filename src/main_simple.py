@@ -2277,6 +2277,23 @@ async def get_system_health():
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 
+@app.get("/api/agents/status")
+async def agents_status():
+    """
+    Estado detallado de los agentes educativos
+    """
+    return {
+        "agents_available": AGENTS_AVAILABLE,
+        "init_error": AGENTS_INIT_ERROR,
+        "groq_api_key_present": bool(getattr(settings, 'groq_api_key', None)),
+        "model": getattr(settings, 'groq_model', None),
+        "required_env": ["GROQ_API_KEY"],
+        "recommendation": None if AGENTS_AVAILABLE else "Define GROQ_API_KEY en .env y reinicia el servidor",
+        "container_env": os.getenv("ENVIRONMENT", "local"),
+        "deployment": "azure-container-apps" if os.getenv("ENVIRONMENT") == "production" else "local"
+    }
+
+
 # === EDUCATIONAL LIBRARY ENDPOINTS - REAL IMPLEMENTATION ===
 
 @app.post("/api/library/upload")
