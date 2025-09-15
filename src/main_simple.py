@@ -1070,6 +1070,36 @@ async def get_system_info():
         "last_startup": datetime.now().isoformat()
     }
 
+@app.get("/api/debug/config")
+async def debug_config():
+    """Endpoint de debug para verificar configuración de API keys y agentes"""
+    debug_info = settings.get_debug_info()
+    
+    return {
+        "config_debug": debug_info,
+        "environment_vars": {
+            "GROQ_API_KEY_present": bool(os.environ.get("GROQ_API_KEY")),
+            "GROQ_API_KEY_length": len(os.environ.get("GROQ_API_KEY", "")),
+            "env_file_check": {
+                "current_dir": os.path.exists(".env"),
+                "base_dir": os.path.exists(os.path.join(str(settings.base_dir), ".env")),
+                "parent_dir": os.path.exists(os.path.join(str(settings.base_dir.parent), ".env"))
+            }
+        },
+        "agents_initialization": {
+            "AGENTS_AVAILABLE": AGENTS_AVAILABLE,
+            "verify_api_key_result": settings.verify_api_key(),
+            "agent_manager_agents_count": len(agent_manager.agents),
+            "agent_manager_agents_list": list(agent_manager.agents.keys())
+        },
+        "current_working_directory": os.getcwd(),
+        "settings_values": {
+            "groq_api_key_configured": bool(settings.groq_api_key),
+            "groq_model": settings.groq_model,
+            "base_dir": str(settings.base_dir)
+        }
+    }
+
 @app.get("/api/agents/types")
 async def get_agent_types():
     """Obtener tipos de agentes disponibles"""
