@@ -49,8 +49,13 @@ export const useMathProcessor = () => {
     let lastIndex = 0;
     let match;
     
-    // Procesar bloques de matemáticas $$...$$
-    const blockMatches = [...text.matchAll(blockMathRegex)];
+    // Procesar bloques de matemáticas $$...$$ (compatible ES5)
+    const blockMatches: RegExpExecArray[] = [];
+    blockMathRegex.lastIndex = 0; // Reset regex
+    while ((match = blockMathRegex.exec(text)) !== null) {
+      blockMatches.push(match);
+    }
+    
     blockMatches.forEach((match, index) => {
       const before = text.slice(lastIndex, match.index);
       if (before) {
@@ -66,9 +71,13 @@ export const useMathProcessor = () => {
       lastIndex = match.index! + match[0].length;
     });
     
-    // Procesar matemáticas inline $...$
+    // Procesar matemáticas inline $...$ (compatible ES5)
     const remainingText = text.slice(lastIndex);
-    const inlineMatches = [...remainingText.matchAll(inlineMathRegex)];
+    const inlineMatches: RegExpExecArray[] = [];
+    inlineMathRegex.lastIndex = 0; // Reset regex
+    while ((match = inlineMathRegex.exec(remainingText)) !== null) {
+      inlineMatches.push(match);
+    }
     
     let inlineLastIndex = 0;
     inlineMatches.forEach((match, index) => {
