@@ -79,6 +79,7 @@ except ImportError as e:
 from src.services.assignment_service import assignment_service
 
 # Importar agentes reales
+AGENTS_INIT_ERROR = None
 try:
     from agents import (
         ExamGeneratorAgent,
@@ -90,12 +91,16 @@ try:
     from agents.student_coach.agent import StudentCoachAgent
     from agents.educational_rag.agent import EducationalRAGAgent
     from fixed_base_agent import EnhancedEducationalAgent
+    # Validar API Key antes de marcar disponibles
+    if not getattr(settings, 'groq_api_key', None):
+        raise ValueError("GROQ_API_KEY no encontrada en configuración (.env)")
     AGENTS_AVAILABLE = True
     print("✅ Agentes reales importados correctamente (incluyendo Educational RAG)")
-except ImportError as e:
-    print(f"⚠️ Error importando agentes reales: {e}")
-    print("🔄 Usando modo simulado")
+except Exception as e:
     AGENTS_AVAILABLE = False
+    AGENTS_INIT_ERROR = str(e)
+    print(f"⚠️ Error importando agentes reales: {e}")
+    print("🔄 Usando modo simulado - establece GROQ_API_KEY y reinstala dependencias si falta 'groq'")
 
 # Biblioteca deshabilitada por complejidad
 REAL_LIBRARY_AVAILABLE = False
@@ -987,236 +992,64 @@ async def health_check_full():
 # === ENDPOINTS DE AGENTES ===
 
 @app.get("/api/agents/status")
-async def get_agents_status():
-    """Obtener estado detallado de todos los agentes"""
-    agents_status = []
-    
-    for agent_id, agent_info in AVAILABLE_AGENTS.items():
-        is_real_agent = agent_id in agent_manager.agents
-        
-        agents_status.append({
-            "type": agent_id,
-            "name": agent_info["name"],
-            "description": agent_info["description"],
-            "icon": agent_info["icon"],
-            "is_real_agent": is_real_agent,
-            "status": "active" if is_real_agent else "simulated",
-            "model": settings.groq_model if is_real_agent else "fallback",
-            "last_updated": datetime.now().isoformat()
-        })
-    
+async def agents_status():
     return {
-        "success": True,
-        "agents": agents_status,
-        "total_agents": len(agents_status),
-        "real_agents": len([a for a in agents_status if a["is_real_agent"]]),
-        "simulated_agents": len([a for a in agents_status if not a["is_real_agent"]]),
-        "current_model": settings.groq_model,
-        "api_key_configured": bool(settings.groq_api_key),
-        "system_status": {
-            "agents_available": AGENTS_AVAILABLE,
-            "total_configured": len(agent_manager.agents),
-            "model_in_use": settings.groq_model,
-            "temperature": settings.groq_temperature,
-            "max_tokens": settings.groq_max_tokens
-        },
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.get("/api/debug/endpoints")
-async def debug_endpoints():
-    """Endpoint de debugging para verificar rutas disponibles"""
-    routes = []
-    for route in app.routes:
-        if hasattr(route, 'path') and hasattr(route, 'methods'):
-            routes.append({
-                "path": route.path,
-                "methods": list(route.methods) if route.methods else ["GET"]
-            })
-    
-    return {
-        "success": True,
-        "total_routes": len(routes),
-        "routes": sorted(routes, key=lambda x: x["path"]),
         "agents_available": AGENTS_AVAILABLE,
-        "library_available": REAL_LIBRARY_AVAILABLE,
-        "timestamp": datetime.now().isoformat()
+        "init_error": AGENTS_INIT_ERROR,
+        "groq_api_key_present": bool(getattr(settings, 'groq_api_key', None)),
+        "model": getattr(settings, 'groq_model', None),
+        "required_env": ["GROQ_API_KEY"],
+        "recommendation": None if AGENTS_AVAILABLE else "Define GROQ_API_KEY en .env y reinicia el servidor"
     }
 
-@app.get("/api/system/info")
-async def get_system_info():
-    """Obtener información detallada del sistema"""
-    return {
-        "system_name": "Sistema Educativo Multiagente",
-        "version": "1.0.0",
-        "model_configuration": {
-            "primary_model": settings.groq_model,
-            "temperature": settings.groq_temperature,
-            "max_tokens": settings.groq_max_tokens,
-            "api_key_configured": bool(settings.groq_api_key)
-        },
-        "agents_status": {
-            "real_agents_available": AGENTS_AVAILABLE,
-            "total_configured": len(agent_manager.agents),
-            "agent_list": list(agent_manager.agents.keys()),
-            "available_types": list(AVAILABLE_AGENTS.keys())
-        },
-        "capabilities": {
-            "multiagent_chat": True,
-            "real_time_responses": True,
-            "collaboration_mode": True,
-            "individual_mode": True
-        },
-        "last_startup": datetime.now().isoformat()
-    }
-
-@app.get("/api/debug/config")
-async def debug_config():
-    """Endpoint de debug para verificar configuración de API keys y agentes"""
-    debug_info = settings.get_debug_info()
-    
-    return {
-        "config_debug": debug_info,
-        "environment_vars": {
-            "GROQ_API_KEY_present": bool(os.environ.get("GROQ_API_KEY")),
-            "GROQ_API_KEY_length": len(os.environ.get("GROQ_API_KEY", "")),
-            "env_file_check": {
-                "current_dir": os.path.exists(".env"),
-                "base_dir": os.path.exists(os.path.join(str(settings.base_dir), ".env")),
-                "parent_dir": os.path.exists(os.path.join(str(settings.base_dir.parent), ".env"))
-            }
-        },
-        "agents_initialization": {
-            "AGENTS_AVAILABLE": AGENTS_AVAILABLE,
-            "verify_api_key_result": settings.verify_api_key(),
-            "agent_manager_agents_count": len(agent_manager.agents),
-            "agent_manager_agents_list": list(agent_manager.agents.keys())
-        },
-        "current_working_directory": os.getcwd(),
-        "settings_values": {
-            "groq_api_key_configured": bool(settings.groq_api_key),
-            "groq_model": settings.groq_model,
-            "base_dir": str(settings.base_dir)
-        }
-    }
-
-@app.get("/api/agents/types")
-async def get_agent_types():
-    """Obtener tipos de agentes disponibles"""
-    return {
-        "agent_types": [
-            {
-                "id": agent_id,
-                "name": agent_info["name"],
-                "description": agent_info["description"],
-                "icon": agent_info["icon"]
-            }
-            for agent_id, agent_info in AVAILABLE_AGENTS.items()
-        ]
-    }
-
-@app.post("/api/agents/render-markdown")
-async def render_markdown_content(request_data: dict):
-    """Endpoint para renderizar contenido markdown de forma bonita"""
+@app.get("/api/agents/test")
+async def test_agents_endpoint():
+    """Endpoint de prueba para verificar agentes"""
     try:
-        raw_content = request_data.get("content", "")
-        
-        if not raw_content:
-            raise HTTPException(status_code=400, detail="Contenido requerido")
-        
-        # Procesar el contenido para limpiarlo y formatearlo
-        processed_content = agent_manager._process_text_escapes(raw_content)
-        
-        # Información adicional para el frontend
-        content_info = {
-            "original_length": len(raw_content),
-            "processed_length": len(processed_content),
-            "has_real_newlines": '\n' in processed_content,
-            "has_escaped_newlines": '\\n' in raw_content,
-            "markdown_elements": {
-                "headers": processed_content.count('##'),
-                "bold": processed_content.count('**'),
-                "italic": processed_content.count('*'),
-                "code_blocks": processed_content.count('```'),
-                "math_blocks": processed_content.count('\\['),
-                "tables": processed_content.count('|'),
-                "quotes": processed_content.count('>')
+        if AGENTS_AVAILABLE:
+            # Probar cada agente real
+            results = {}
+            for agent_id in agent_manager.agents:
+                try:
+                    agent = agent_manager.agents[agent_id]
+                    response = await agent.process_request("¿Cuál es la capital de Francia?", {})
+                    results[agent_id] = {
+                        "success": True,
+                        "response_sample": str(response)[:100] + "...",
+                        "type": str(type(response))
+                    }
+                except Exception as e:
+                    results[agent_id] = {
+                        "success": False,
+                        "error": str(e)
+                    }
+            return {
+                "success": True,
+                "agents_tested": len(results),
+                "results": results
             }
-        }
-        
-        return {
-            "success": True,
-            "original_content": raw_content,
-            "processed_content": processed_content,
-            "content_info": content_info,
-            "render_ready": True,
-            "timestamp": datetime.now().isoformat()
-        }
-        
+        else:
+            return {"success": False, "message": "Agentes no disponibles en este momento"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/agents/test-clean-response")
-async def test_clean_response(request_data: dict):
-    """Endpoint de prueba para verificar respuestas limpias"""
+@app.get("/api/agents/{agent_id}/test")
+async def test_specific_agent(agent_id: str):
+    """Probar un agente específico"""
     try:
-        message = request_data.get("message", "¿Qué es una derivada?")
-        agent_id = request_data.get("agent_id", "tutor")
-        
-        if agent_id not in AVAILABLE_AGENTS:
-            raise HTTPException(status_code=400, detail="Agente no válido")
-        
-        print(f"🧪 PRUEBA: Probando respuesta limpia para agente {agent_id}")
-        print(f"📝 Mensaje: {message}")
-        
-        # Obtener respuesta del agente
-        raw_response = await agent_manager.get_agent_response(agent_id, message, {})
-        
-        # Información de debugging
-        response_info = {
-            "raw_response_type": str(type(raw_response)),
-            "is_runresponse": hasattr(raw_response, 'content') and hasattr(raw_response, 'content_type'),
-            "raw_length": len(str(raw_response)),
-            "clean_response": str(raw_response).strip(),
-            "clean_length": len(str(raw_response).strip())
-        }
-        
-        # Si detectamos RunResponse, extraer contenido
-        if hasattr(raw_response, 'content'):
-            clean_content = agent_manager._extract_clean_response(raw_response)
-            response_info["extracted_content"] = clean_content
-            response_info["extracted_length"] = len(str(clean_content))
-            # Aplicar limpieza adicional
-            final_response = agent_manager._clean_runresponse_string(clean_content)
+        if agent_id in agent_manager.agents:
+            agent = agent_manager.agents[agent_id]
+            response = await agent.process_request("¿Cuál es la capital de Francia?", {})
+            return {
+                "success": True,
+                "agent_id": agent_id,
+                "response_sample": str(response)[:100] + "...",
+                "type": str(type(response))
+            }
         else:
-            # Aplicar limpieza adicional incluso si no es RunResponse
-            final_response = agent_manager._clean_runresponse_string(raw_response)
-        
-        # Verificaciones adicionales
-        response_info["contains_runresponse_text"] = "RunResponse(" in str(final_response)
-        response_info["final_length"] = len(str(final_response))
-        
-        # Si aún contiene RunResponse, marcar como problema
-        if "RunResponse(" in str(final_response):
-            response_info["cleaning_status"] = "❌ FAILED - Still contains RunResponse"
-        else:
-            response_info["cleaning_status"] = "✅ SUCCESS - Clean content"
-        
-        return {
-            "success": True,
-            "test_info": response_info,
-            "final_response": final_response,
-            "response_preview": final_response[:200] + "..." if len(final_response) > 200 else final_response,
-            "agent_info": {
-                "id": agent_id,
-                "name": AVAILABLE_AGENTS[agent_id]["name"],
-                "is_real": agent_id in agent_manager.agents
-            },
-            "timestamp": datetime.now().isoformat()
-        }
-        
+            return {"success": False, "message": "Agente no encontrado"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": str(e)}
 
 @app.post("/api/agents/chat/formatted")
 async def formatted_agent_chat(request_data: dict):
@@ -2857,28 +2690,6 @@ async def search_library_documents(request_data: dict):
         else:
             results = f"Resultados de búsqueda para '{query}' (modo simulado)"
         
-        # Simular resultados de búsqueda
-        mock_results = [
-            {
-                "id": "doc_001",
-                "title": "Introducción al Cálculo",
-                "subject": "Matemáticas",
-                "type": "pdf",
-                "relevance": 0.95,
-                "summary": "Conceptos básicos de derivadas e integrales",
-                "tags": ["cálculo", "matemáticas", "derivadas"]
-            },
-            {
-                "id": "doc_002", 
-                "title": "Historia de la Segunda Guerra Mundial",
-                "subject": "Historia",
-                "type": "document",
-                "relevance": 0.78,
-                "summary": "Eventos principales de 1939-1945",
-                "tags": ["historia", "guerra", "siglo-xx"]
-            }
-        ]
-        
         # Registrar actividad de búsqueda
         activity = {
             "type": "library_search",
@@ -3330,40 +3141,3 @@ async def ask_specific_document(document_id: str, request_data: dict):
     except Exception as e:
         print(f"❌ Error preguntando documento {document_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error procesando pregunta focalizada: {str(e)}")
-
-# ===== END ENHANCED LIBRARY ENDPOINTS =====
-
-if __name__ == "__main__":
-    # Crear directorios necesarios
-    try:
-        settings.create_directories()
-    except:
-        pass
-    
-    print("🚀 Iniciando Sistema Educativo Multiagente")
-    print(f"🤖 Agentes reales disponibles: {AGENTS_AVAILABLE}")
-    if AGENTS_AVAILABLE:
-        print(f"� Agentes configurados: {list(agent_manager.agents.keys())}")
-    
-    # Iniciar servidor con configuración según el entorno
-    host = os.getenv("HOST", "127.0.0.1")
-    port = int(os.getenv("PORT", "8000"))
-    environment = os.getenv("ENVIRONMENT", "development")
-    
-    if environment == "production":
-        # Configuración para producción
-        uvicorn.run(
-            "src.main_simple:app",
-            host=host,
-            port=port,
-            reload=False,
-            workers=1
-        )
-    else:
-        # Configuración para desarrollo
-        uvicorn.run(
-            "main_simple:app",
-            host=host,
-            port=port,
-            reload=True
-        )
