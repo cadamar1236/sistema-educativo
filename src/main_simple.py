@@ -97,40 +97,9 @@ except ImportError as e:
     print("🔄 Usando modo simulado")
     AGENTS_AVAILABLE = False
 
-# Importar servicio de biblioteca con wrapper unificado
-try:
-    # Usar el wrapper que maneja las diferencias de interfaz
-    from library_service_wrapper import LibraryServiceWrapper
-    real_library = LibraryServiceWrapper()
-    REAL_LIBRARY_AVAILABLE = True
-    print("✅ Servicio de biblioteca con wrapper unificado importado correctamente")
-    print("✅ El wrapper maneja automáticamente las diferencias de parámetros entre servicios")
-    
-    # El wrapper ya incluye el servicio mejorado internamente si está disponible
-    enhanced_library = real_library  # Usar el mismo wrapper para compatibilidad
-except ImportError as e:
-    print(f"⚠️ Error importando servicio de biblioteca con wrapper: {e}")
-    print("🔄 Intentando importar servicios individuales...")
-    
-    # Fallback a servicios individuales si el wrapper no está disponible
-    try:
-        from real_library_service import RealLibraryService
-        real_library = RealLibraryService()
-        REAL_LIBRARY_AVAILABLE = True
-        print("✅ Servicio real de biblioteca importado directamente")
-        
-        # Importar servicio mejorado de biblioteca
-        try:
-            from enhanced_library_service import EnhancedLibraryService
-            enhanced_library = EnhancedLibraryService()
-            print("✅ Servicio mejorado de biblioteca con OCR importado")
-        except ImportError as lib_e:
-            print(f"⚠️ Error importando servicio mejorado: {lib_e}")
-            enhanced_library = None
-    except ImportError as e2:
-        print(f"⚠️ Error importando servicio real de biblioteca: {e2}")
-        print("🔄 Usando biblioteca simulada")
-        REAL_LIBRARY_AVAILABLE = False
+# Biblioteca deshabilitada por complejidad
+REAL_LIBRARY_AVAILABLE = False
+print("⚠️ Biblioteca deshabilitada - funcionalidad removida por complejidad")
 
 # Asegurar que el propio directorio src esté en el path para imports relativos directos
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -2383,43 +2352,6 @@ async def educational_rag_query_endpoint(request_data: dict):
                 "user_id": user_id
             }
         }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/agents/educational-rag/library-stats/{user_id}")
-async def get_library_stats_endpoint(user_id: str):
-    """
-    Obtener estadísticas de la biblioteca educativa personal
-    """
-    try:
-        # Obtener agente
-        if AGENTS_AVAILABLE and "educational_rag" in agent_manager.agents:
-            rag_agent = agent_manager.agents["educational_rag"]
-            result = rag_agent.get_library_stats(user_id)
-        else:
-            # Respuesta simulada
-            result = {
-                "success": True,
-                "stats": {
-                    "total_documents": 5,
-                    "total_words": 12500,
-                    "subjects_count": 3,
-                    "categories_count": 4
-                },
-                "subjects": [
-                    {"subject": "Matemáticas", "count": 2},
-                    {"subject": "Historia", "count": 2},
-                    {"subject": "Ciencias", "count": 1}
-                ],
-                "recent_documents": [
-                    {"filename": "Álgebra_Lineal.pdf", "subject": "Matemáticas"},
-                    {"filename": "Historia_Contemporánea.docx", "subject": "Historia"}
-                ]
-            }
-        
-        return result
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

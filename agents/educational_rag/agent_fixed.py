@@ -211,26 +211,3 @@ class EducationalRAGAgentFixed:
         except Exception as e:
             logger.error(f"Error listando documentos: {e}")
             return []
-    
-    def get_library_stats(self, user_id: str) -> Dict[str, Any]:
-        """Obtener estadísticas de la biblioteca"""
-        documents = self.list_documents(user_id)
-        
-        subjects = {}
-        categories = {}
-        
-        for doc in documents:
-            subject = doc.get('subject', 'General')
-            subjects[subject] = subjects.get(subject, 0) + 1
-            
-            category = doc.get('category', 'General')
-            categories[category] = categories.get(category, 0) + 1
-        
-        return {
-            "total_documents": len(documents),
-            "total_words": sum(len(doc.get('content', '').split()) for doc in documents),
-            "subjects_count": len(subjects),
-            "categories_count": len(categories),
-            "subjects": subjects,
-            "categories": categories
-        }

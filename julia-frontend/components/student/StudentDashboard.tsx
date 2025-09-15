@@ -24,8 +24,7 @@ import {
   Activity,
   Flame,
   BarChart3,
-  Users,
-  Library
+  Users
 } from 'lucide-react'
 import AgentChat from './AgentChat'
 import MultiAgentChat from './MultiAgentChat'
@@ -34,7 +33,6 @@ import StudyPlanner from './StudyPlanner'
 import ProgressTrackerReal from './ProgressTrackerReal'
 import AICoachReal from './AICoachReal'
 import VirtualClassroom from './VirtualClassroom'
-import EducationalLibrary from '@/components/library/EducationalLibrary'
 
 interface StudentDashboardProps {
   studentId?: string;
@@ -543,15 +541,6 @@ export default function StudentDashboard({ studentId }: StudentDashboardProps) {
             </div>
           }>
             <VirtualClassroom studentData={minimalStudentData} />
-          </Tab>
-
-          <Tab key="library" title={
-            <div className="flex items-center space-x-2">
-              <Library className="h-4 w-4" />
-              <span>Biblioteca</span>
-            </div>
-          }>
-            <EducationalLibrary />
           </Tab>
 
           <Tab key="multiagent-chat" title={

@@ -552,11 +552,7 @@ Genera una respuesta educativa completa y personalizada.
             subject=subject, 
             level=level
         )
-    
-    def get_library_stats(self, user_id: str) -> Dict:
-        """API para estadísticas de biblioteca"""
-        return self.doc_manager.get_user_library_stats(user_id)
-    
+
     def search_documents(self, user_id: str, query: str, subject: str = None, 
                         category: str = None) -> Dict:
         """API para búsqueda en documentos"""
