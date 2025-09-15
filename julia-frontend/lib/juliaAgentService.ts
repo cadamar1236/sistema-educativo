@@ -1,13 +1,16 @@
 import axios, { AxiosRequestConfig } from 'axios';
 
-// Configuración base para conectar con el backend usando apiConfig
+// Configuración base para conectar con el backend usando detección automática de entorno
 const getApiBaseUrl = () => {
   if (typeof window !== 'undefined') {
     // En el cliente, detectar si estamos en desarrollo o producción
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    return isDevelopment 
+    const apiUrl = isDevelopment 
       ? 'http://127.0.0.1:8000' 
       : 'https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io';
+    
+    console.log(`🔗 Julia Agent Service - Usando API: ${apiUrl} (isDev: ${isDevelopment})`);
+    return apiUrl;
   }
   // En el servidor, usar producción por defecto
   return 'https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io';
