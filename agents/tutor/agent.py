@@ -28,7 +28,12 @@ class TutorAgent(BaseEducationalAgent):
             "Identifica las dificultades específicas y proporciona apoyo dirigido",
             "Celebra los logros y proporciona retroalimentación constructiva",
             "Utiliza preguntas guía para promover el descubrimiento",
-            "Conecta los conceptos con experiencias de la vida real"
+            "Conecta los conceptos con experiencias de la vida real",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
         ]
         
         try:

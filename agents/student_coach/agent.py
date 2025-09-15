@@ -125,44 +125,32 @@ class StudentCoachAgent:
         )
     
     def _get_coaching_instructions(self) -> str:
-        """Instrucciones de coaching inspiradas en Risely pero mejoradas"""
+        """Instrucciones de coaching simplificadas pero efectivas"""
         return """
-        Eres un Coach Estudiantil IA avanzado, inspirado en Merlin de Risely.ai pero con capacidades superiores.
+        Eres un Coach Estudiantil IA experto y empático.
 
         TU MISIÓN:
-        - Proporcionar coaching académico personalizado
-        - Detectar y responder a señales emocionales
-        - Motivar y empoderar a los estudiantes
-        - Ofrecer estrategias de aprendizaje efectivas
-        - Crear un ambiente de apoyo y confianza
-
-        CAPACIDADES AVANZADAS:
-        1. 🎯 Coaching Personalizado: Adaptas tu estilo según cada estudiante
-        2. 🧠 Análisis Emocional: Detectas estrés, ansiedad, frustración
-        3. 💪 Motivación Activa: Refuerzas la confianza y autoestima
-        4. 📚 Estrategias de Estudio: Ofreces técnicas probadas
-        5. 🔄 Seguimiento Continuo: Monitoreas el progreso
+        - Ayudar a estudiantes con sus desafíos académicos
+        - Proporcionar apoyo emocional y motivación
+        - Ofrecer estrategias de estudio efectivas
+        - Ser un mentor confiable y comprensivo
 
         ESTILO DE COMUNICACIÓN:
         - Empático y comprensivo
-        - Motivador pero realista
-        - Adaptado a la edad del estudiante
-        - Enfocado en soluciones
-        - Celebra los pequeños logros
+        - Claro y directo
+        - Motivador y positivo
+        - Práctico y accionable
 
-        DETECCIÓN EMOCIONAL:
-        Si detectas:
-        - Estrés → Ofrece técnicas de relajación
-        - Frustración → Reformula objetivos más pequeños
-        - Desmotivación → Conecta con sus intereses
-        - Ansiedad → Proporciona apoyo emocional
-        - Confusion → Simplifica explicaciones
+        IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:
+        - Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)
+        - Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)
+        - NUNCA uses paréntesis (expresión) para matemáticas
 
         SIEMPRE:
-        - Responde con contenido útil y valioso
-        - Mantén un tono positivo y profesional
-        - Ofrece pasos concretos y accionables
-        - Personaliza según el contexto del estudiante
+        - Proporciona respuestas completas y útiles
+        - Ofrece pasos concretos
+        - Mantén un tono positivo
+        - Adapta tu lenguaje al nivel del estudiante
         """
     
     def get_response(self, message: str) -> str:
@@ -211,7 +199,7 @@ class StudentCoachAgent:
     
     async def coach_student(self, message: str, student_context: Optional[Dict] = None) -> str:
         """
-        Función principal de coaching que supera a Risely.ai
+        Función principal de coaching simplificada y mejorada
         
         Args:
             message: Mensaje del estudiante
@@ -221,49 +209,50 @@ class StudentCoachAgent:
             Respuesta de coaching personalizada
         """
         try:
-            # Actualizar perfil del estudiante
-            if student_context:
-                self.student_profile.update(student_context)
+            # Construir prompt directo y conciso
+            student_name = student_context.get('name', 'estudiante') if student_context else 'estudiante'
             
-            # Analizar estado emocional
-            emotional_analysis = await self._analyze_emotional_state(message)
-            
-            # Construir prompt de coaching personalizado
-            coaching_prompt = self._build_coaching_prompt(message, emotional_analysis)
-            
-            # Obtener respuesta del coach (puede venir con el prompt impreso)
-            response = self.get_response(coaching_prompt)
-            response = self._strip_prompt_context(response)
+            # Prompt simplificado pero efectivo
+            coaching_prompt = f"""Como coach estudiantil, ayuda a {student_name} con esta consulta:
 
-            # Limpieza de caracteres de marco / colores ANSI si aparecen
+"{message}"
+
+Proporciona:
+1. Una respuesta empática y motivadora
+2. Consejos específicos y accionables
+3. Estrategias de estudio si es relevante
+4. Apoyo emocional si es necesario
+
+Mantén un tono positivo, profesional y alentador."""
+            
+            # Obtener respuesta del coach
+            response = self.get_response(coaching_prompt)
+            
+            # Limpieza básica de la respuesta
             if isinstance(response, str):
-                # Eliminar bordes y caracteres de caja comunes
+                # Eliminar códigos ANSI y caracteres especiales
+                import re
+                ansi_pattern = re.compile(r'\x1b\[[0-9;]*m')
+                response = re.sub(ansi_pattern, '', response)
+                # Limpiar caracteres de caja
                 for ch in ['┏', '┗', '┃', '━', '┛']:
                     response = response.replace(ch, '')
-                # Eliminar códigos ANSI de color
-                import re as _re
-                ansi_pattern = _re.compile(r'\x1b\[[0-9;]*m')
-                response = _re.sub(ansi_pattern, '', response)
-                # Colapsar espacios múltiples generados
-                response = '\n'.join(line.rstrip() for line in response.splitlines())
+                response = response.strip()
             
             # Registrar la sesión
             session_record = {
                 "timestamp": datetime.now().isoformat(),
                 "student_message": message,
-                "emotional_state": emotional_analysis,
                 "coach_response": response,
                 "context": student_context
             }
             self.session_history.append(session_record)
             
-            # Determinar si necesita intervención
-            await self._assess_intervention_needs(emotional_analysis, message)
-            
-            return response.strip()
+            return response if response and len(response) > 10 else "Como tu coach, te ayudo a superar cualquier desafío académico. ¿Podrías ser más específico sobre lo que necesitas?"
             
         except Exception as e:
-            return f"Lo siento, experimento dificultades técnicas. Como tu coach, te sugiero que reformulemos tu pregunta. ¿En qué específicamente puedo ayudarte hoy? Error: {str(e)}"
+            print(f"❌ Error en coach_student: {e}")
+            return f"Como tu coach personal, estoy aquí para apoyarte. Cuéntame más específicamente en qué puedo ayudarte con tus estudios."
     
     async def _analyze_emotional_state(self, message: str) -> Dict:
         """Análisis emocional avanzado del mensaje del estudiante"""

@@ -174,49 +174,105 @@ AGENT_CONFIGS = {
         "temperature": 0.7,
         "max_tokens": 4096,
         "memory_enabled": True,
-        "tools": []  # Sin herramientas complejas
+        "tools": [],  # Sin herramientas complejas
+        "instructions": [
+            "Use markdown to format your answers.",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
+        ]
     },
     "curriculum_creator": {
         "model": "openai/gpt-oss-20b",  # Usar GPT OSS 20B
         "temperature": 0.7,
         "max_tokens": 4096,
         "memory_enabled": True,
-        "tools": []
+        "tools": [],
+        "instructions": [
+            "Use markdown to format your answers.",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
+        ]
     },
     "tutor": {
         "model": "openai/gpt-oss-20b",  # Usar GPT OSS 20B
         "temperature": 0.8,
         "max_tokens": 2048,
         "memory_enabled": True,
-        "tools": []
+        "tools": [],
+        "instructions": [
+            "Use markdown to format your answers.",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
+        ]
     },
     "lesson_planner": {
         "model": "openai/gpt-oss-20b",  # Usar GPT OSS 20B
         "temperature": 0.7,
         "max_tokens": 4096,
         "memory_enabled": True,
-        "tools": []
+        "tools": [],
+        "instructions": [
+            "Use markdown to format your answers.",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
+        ]
     },
     "document_analyzer": {
         "model": "openai/gpt-oss-20b",  # Usar GPT OSS 20B
         "temperature": 0.5,
         "max_tokens": 4096,
         "memory_enabled": True,
-        "tools": []
+        "tools": [],
+        "instructions": [
+            "Use markdown to format your answers.",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
+        ]
     },
     "student_coach": {
         "model": "openai/gpt-oss-20b",  # Usar GPT OSS 20B
         "temperature": 0.7,
         "max_tokens": 2048,
         "memory_enabled": True,
-        "tools": []
+        "tools": [],
+        "instructions": [
+            "Use markdown to format your answers.",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
+        ]
     },
     "analytics": {
         "model": "openai/gpt-oss-20b",  # Usar GPT OSS 20B
         "temperature": 0.5,
         "max_tokens": 4096,
         "memory_enabled": True,
-        "tools": []
+        "tools": [],
+        "instructions": [
+            "Use markdown to format your answers.",
+            "IMPORTANTE: Para matemáticas, usa SIEMPRE sintaxis LaTeX:",
+            "- Matemáticas en línea: $expresión$ (ejemplo: $f(x) = x^2$)",
+            "- Matemáticas en bloque: $$expresión$$ (ejemplo: $$\\frac{df}{dx} = 2x$$)",
+            "- NUNCA uses paréntesis (expresión) para matemáticas",
+            "- Ejemplos correctos: $y = f(x)$, $f'(x)$, $\\dfrac{df}{dx}$, $$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$"
+        ]
     }
 }
 

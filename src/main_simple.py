@@ -744,11 +744,17 @@ class RealAgentManager:
         # Logging para debugging
         print(f"🔍 Extrayendo respuesta de tipo: {type(result)}")
         
-        # Si es un objeto RunResponse de Agno - extraer SOLO el content
+        # Si es un objeto RunOutput de Agno - extraer SOLO el content
         if hasattr(result, 'content') and hasattr(result, 'content_type'):
             content = result.content
-            print(f"✅ Contenido extraído de RunResponse: {len(str(content))} caracteres")
+            print(f"✅ Contenido extraído de RunOutput: {len(str(content))} caracteres")
             # IMPORTANTE: Retornar solo el string del contenido, nada más
+            return str(content) if content is not None else ""
+            
+        # Si es un objeto RunResponse/RunOutput con content
+        if hasattr(result, 'content'):
+            content = result.content
+            print(f"✅ Contenido extraído de objeto con content: {len(str(content))} caracteres")
             return str(content) if content is not None else ""
             
         # Si es un diccionario
@@ -764,30 +770,41 @@ class RealAgentManager:
         content = str(result)
         print(f"✅ Contenido convertido a string: {len(content)} caracteres")
         
-        # FILTRO ADICIONAL: Si el string contiene "RunResponse(", extraer solo el contenido
-        if "RunResponse(" in content:
-            print("⚠️ Detectado string con RunResponse, filtrando...")
+        # FILTRO ADICIONAL: Si el string contiene "RunOutput(" o "RunResponse(", extraer solo el contenido
+        if "RunOutput(" in content or "RunResponse(" in content:
+            print("⚠️ Detectado string con RunOutput/RunResponse, filtrando...")
             # Intentar extraer solo el contenido entre content="..." 
             import re
-            match = re.search(r'content="([^"]*)"', content)
+            # Regex mejorado para capturar contenido multi-línea
+            match = re.search(r'content="([^"]*(?:\\.[^"]*)*)"', content, re.DOTALL)
             if match:
                 clean_content = match.group(1)
-                print(f"🧹 Contenido filtrado: {len(clean_content)} caracteres")
+                # Procesar escapes
+                clean_content = clean_content.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t')
+                print(f"🧹 Contenido filtrado con regex: {len(clean_content)} caracteres")
                 return clean_content
-            # Si no funciona el regex, intentar otro método
+            
+            # Método alternativo: buscar content= y extraer hasta la siguiente coma o fin
             if 'content=' in content:
                 try:
-                    # Buscar el contenido después de content=
-                    start = content.find('content=') + 8
-                    if content[start] == '"':
-                        start += 1
-                        end = content.find('"', start)
-                        if end > start:
-                            clean_content = content[start:end]
-                            print(f"🧹 Contenido extraído manualmente: {len(clean_content)} caracteres")
-                            return clean_content
-                except:
-                    pass
+                    start_pattern = content.find('content=') + 8
+                    # Saltar espacios y comillas
+                    while start_pattern < len(content) and content[start_pattern] in ' "\'':
+                        start_pattern += 1
+                    
+                    # Buscar el final del contenido
+                    if start_pattern < len(content):
+                        # Si empieza con comilla, buscar la comilla de cierre
+                        if content[start_pattern-1] in '"\'':
+                            quote_char = content[start_pattern-1]
+                            end = content.find(quote_char, start_pattern)
+                            if end > start_pattern:
+                                clean_content = content[start_pattern:end]
+                                clean_content = clean_content.replace('\\n', '\n').replace('\\t', '\t')
+                                print(f"🧹 Contenido extraído por búsqueda manual: {len(clean_content)} caracteres")
+                                return clean_content
+                except Exception as e:
+                    print(f"❌ Error en extracción manual: {e}")
         
         return content
     
@@ -2271,16 +2288,23 @@ async def agents_status():
     """
     Estado detallado de los agentes educativos
     """
-    return {
-        "agents_available": AGENTS_AVAILABLE,
-        "init_error": AGENTS_INIT_ERROR,
-        "groq_api_key_present": bool(getattr(settings, 'groq_api_key', None)),
-        "model": getattr(settings, 'groq_model', None),
-        "required_env": ["GROQ_API_KEY"],
-        "recommendation": None if AGENTS_AVAILABLE else "Define GROQ_API_KEY en .env y reinicia el servidor",
-        "container_env": os.getenv("ENVIRONMENT", "local"),
-        "deployment": "azure-container-apps" if os.getenv("ENVIRONMENT") == "production" else "local"
-    }
+    try:
+        print(f"🔍 Agents status endpoint called - AGENTS_AVAILABLE: {AGENTS_AVAILABLE}")
+        return {
+            "success": True,
+            "agents": list(AVAILABLE_AGENTS.keys()),
+            "agents_available": AGENTS_AVAILABLE,
+            "init_error": AGENTS_INIT_ERROR,
+            "groq_api_key_present": bool(getattr(settings, 'groq_api_key', None)),
+            "model": getattr(settings, 'groq_model', None),
+            "required_env": ["GROQ_API_KEY"],
+            "recommendation": None if AGENTS_AVAILABLE else "Define GROQ_API_KEY en .env y reinicia el servidor",
+            "container_env": os.getenv("ENVIRONMENT", "local"),
+            "deployment": "azure-container-apps" if os.getenv("ENVIRONMENT") == "production" else "local"
+        }
+    except Exception as e:
+        print(f"❌ Error in agents_status endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # === EDUCATIONAL LIBRARY ENDPOINTS - REAL IMPLEMENTATION ===
