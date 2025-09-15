@@ -44,7 +44,7 @@ export const useMathProcessor = () => {
     // Expresiones regulares para diferentes tipos de matemáticas
     const inlineMathRegex = /\$([^$]+)\$/g; // $formula$
     const blockMathRegex = /\$\$([^$]+)\$\$/g; // $$formula$$
-    const latexRegex = /\\\\begin\{.*?\}.*?\\\\end\{.*?\}/gs; // LaTeX blocks
+    const latexRegex = /\\\\begin\{[\s\S]*?\}[\s\S]*?\\\\end\{[\s\S]*?\}/g; // LaTeX blocks (compatible ES5)
     
     let lastIndex = 0;
     let match;
