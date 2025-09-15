@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { agentsApi } from '@/lib/apiConfig'
+import { EnhancedMessage } from '@/components/ui/EnhancedMessage'
 import { 
   Card, 
   CardBody, 

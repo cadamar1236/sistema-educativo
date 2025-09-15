@@ -1023,6 +1023,26 @@ async def get_agents_status():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/api/debug/endpoints")
+async def debug_endpoints():
+    """Endpoint de debugging para verificar rutas disponibles"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods) if route.methods else ["GET"]
+            })
+    
+    return {
+        "success": True,
+        "total_routes": len(routes),
+        "routes": sorted(routes, key=lambda x: x["path"]),
+        "agents_available": AGENTS_AVAILABLE,
+        "library_available": REAL_LIBRARY_AVAILABLE,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/api/system/info")
 async def get_system_info():
     """Obtener información detallada del sistema"""

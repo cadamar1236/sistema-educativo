@@ -1,8 +1,19 @@
 import axios, { AxiosRequestConfig } from 'axios';
 
-// Configuración base para conectar con el backend de Julia
-import { apiBase } from './runtimeApi';
-const API_BASE_URL = apiBase() + '/api';
+// Configuración base para conectar con el backend usando apiConfig
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    // En el cliente, detectar si estamos en desarrollo o producción
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isDevelopment 
+      ? 'http://127.0.0.1:8000' 
+      : 'https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io';
+  }
+  // En el servidor, usar producción por defecto
+  return 'https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Cliente HTTP configurado (se le podrán inyectar headers dinámicos)
 const apiClient = axios.create({
@@ -76,7 +87,7 @@ class JuliaAgentService {
   async getStudentAnalytics(studentId: string, performanceData: any): Promise<AnalyticsResponse> {
     return this.request<AnalyticsResponse>({
       method: 'POST',
-      url: '/agents/analytics/analyze',
+      url: '/api/agents/analytics/analyze',
       data: { student_id: studentId, performance_data: performanceData },
       retries: 1
     });
@@ -86,7 +97,7 @@ class JuliaAgentService {
   async getStudentCoaching(studentId: string, context: any): Promise<CoachingResponse> {
     return this.request<CoachingResponse>({
       method: 'POST',
-      url: '/agents/student-coach/get-guidance',
+      url: '/api/agents/student-coach/get-guidance',
       data: { student_id: studentId, context, request_type: 'personalized_guidance' },
       retries: 1
     });
@@ -96,7 +107,7 @@ class JuliaAgentService {
   async getStudyPlanning(studentId: string, subjects: string[], goals: any): Promise<any> {
     return this.request({
       method: 'POST',
-      url: '/agents/lesson-planner/create-plan',
+      url: '/api/agents/lesson-planner/create-plan',
       data: { student_id: studentId, subjects, learning_goals: goals, duration: '1_month' }
     });
   }
@@ -105,7 +116,7 @@ class JuliaAgentService {
   async analyzeStudentProgress(studentId: string, documents: any[]): Promise<any> {
     return this.request({
       method: 'POST',
-      url: '/agents/document-analyzer/analyze-progress',
+      url: '/api/agents/document-analyzer/analyze-progress',
       data: { student_id: studentId, documents, analysis_type: 'progress_tracking' }
     });
   }
@@ -114,7 +125,7 @@ class JuliaAgentService {
   async generatePracticeExam(studentId: string, subject: string, difficulty: string): Promise<any> {
     return this.request({
       method: 'POST',
-      url: '/agents/exam-generator/create-exam',
+      url: '/api/agents/exam-generator/create-exam',
       data: { student_id: studentId, subject, difficulty, question_count: 10, exam_type: 'practice' }
     });
   }
@@ -123,7 +134,7 @@ class JuliaAgentService {
   async getParentReport(studentId: string): Promise<any> {
     return this.request({
       method: 'POST',
-      url: '/agents/analytics/parent-report',
+      url: '/api/agents/analytics/parent-report',
       data: { student_id: studentId }
     });
   }
@@ -132,7 +143,7 @@ class JuliaAgentService {
   async getClassroomAnalytics(classId: string, studentsData: any[]): Promise<any> {
     return this.request({
       method: 'POST',
-      url: '/agents/analytics/classroom-analytics',
+      url: '/api/agents/analytics/classroom-analytics',
       data: { class_id: classId, students_data: studentsData }
     });
   }
@@ -141,7 +152,7 @@ class JuliaAgentService {
   async coordinateAgents(request: MultiAgentRequest): Promise<any> {
     return this.request({
       method: 'POST',
-      url: '/agents/coordinator/execute',
+      url: '/api/agents/coordinator/execute',
       data: request
     });
   }
@@ -149,7 +160,7 @@ class JuliaAgentService {
   // Obtener estado del estudiante en tiempo real
   async getStudentRealTimeData(studentId: string): Promise<RealTimeData | null> {
     try {
-      return await this.request<RealTimeData>({ method: 'GET', url: `/students/${studentId}/realtime` });
+      return await this.request<RealTimeData>({ method: 'GET', url: `/api/students/${studentId}/realtime` });
     } catch (error) {
       console.error('Error getting real-time data:', error);
       return null; // UI decidirá qué mostrar
@@ -161,7 +172,7 @@ class JuliaAgentService {
     try {
       await this.request({
         method: 'POST',
-        url: '/students/interactions',
+        url: '/api/students/interactions',
         data: { student_id: studentId, interaction, timestamp: new Date().toISOString() }
       });
     } catch (error) {
@@ -174,7 +185,7 @@ class JuliaAgentService {
     try {
       return await this.request<RecommendationsResponse>({
         method: 'POST',
-        url: '/agents/recommendations/generate',
+        url: '/api/agents/recommendations/generate',
         data: { student_id: studentId, context: currentContext, timestamp: new Date().toISOString() },
         retries: 1
       });
@@ -196,7 +207,7 @@ class JuliaAgentService {
   async startTutoringSession(studentId: string, subject: string, questions: string[]): Promise<any> {
     return this.request({
       method: 'POST',
-      url: '/agents/tutor/start-session',
+      url: '/api/agents/tutor/start-session',
       data: { student_id: studentId, subject, questions, session_type: 'interactive' }
     });
   }

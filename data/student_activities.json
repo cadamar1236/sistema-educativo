@@ -361,6 +361,70 @@
       "points_earned": 10,
       "timestamp": "2025-08-18T13:54:02.239654",
       "date": "2025-08-18"
+    },
+    {
+      "type": "agent_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 5.252,
+      "response_status": 200,
+      "hour": 17,
+      "user_email": "unknown@example.com",
+      "auto_tracked": true,
+      "agent_type": "unified-chat",
+      "timestamp": "2025-09-15T17:23:25.427357",
+      "date": "2025-09-15"
+    },
+    {
+      "type": "agent_interaction",
+      "endpoint": "/api/agents/unified-chat",
+      "method": "POST",
+      "duration_seconds": 2.743,
+      "response_status": 200,
+      "hour": 17,
+      "user_email": "unknown@example.com",
+      "auto_tracked": true,
+      "agent_type": "unified-chat",
+      "timestamp": "2025-09-15T17:24:34.999497",
+      "date": "2025-09-15"
+    }
+  ],
+  "cadamar1236@gmail.com": [
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "tutor"
+      ],
+      "subject": "Tutoría General",
+      "message": "dime que es una derivada",
+      "duration_minutes": 1,
+      "points_earned": 30,
+      "hour": 17,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "user_email": "cadamar1236@gmail.com",
+      "timestamp": "2025-09-15T17:23:25.363243",
+      "date": "2025-09-15"
+    },
+    {
+      "type": "chat_session",
+      "subtype": "unified_chat",
+      "chat_mode": "individual",
+      "agents_used": [
+        "tutor"
+      ],
+      "subject": "Tutoría General",
+      "message": "dime que es una derivada",
+      "duration_minutes": 1,
+      "points_earned": 30,
+      "hour": 17,
+      "agents_count": 1,
+      "is_multi_agent": false,
+      "user_email": "cadamar1236@gmail.com",
+      "timestamp": "2025-09-15T17:24:34.955487",
+      "date": "2025-09-15"
     }
   ]
 }

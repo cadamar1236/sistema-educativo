@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { agentsApi } from '@/lib/apiConfig'
+import { useMathProcessor } from '@/hooks/useMathProcessor'
 import { 
   Card, 
   CardBody, 
@@ -103,6 +104,7 @@ interface AgentChatProps {
 export default function AgentChat({ onActivityUpdate }: AgentChatProps) {
   const { user } = useAuth() as any
   const studentId = user?.email || user?.id  // Preferir email sobre ID
+  const { processAgentResponse, processMessage } = useMathProcessor()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -174,11 +176,14 @@ export default function AgentChat({ onActivityUpdate }: AgentChatProps) {
 
       const data = await response.json()
 
+      // Procesar la respuesta para mejorar el rendering matemático
+      const processedData = processAgentResponse(data)
+
       if (chatMode === 'collaboration') {
         // Modo colaboración: una sola respuesta
-        const collaborationContent = typeof data.collaboration_result === 'string' 
-          ? data.collaboration_result 
-          : JSON.stringify(data.collaboration_result, null, 2)
+        const collaborationContent = typeof processedData.collaboration_result === 'string' 
+          ? processedData.collaboration_result 
+          : JSON.stringify(processedData.collaboration_result, null, 2)
           
         const collaborationMessage: Message = {
           id: Date.now().toString() + '_collab',
@@ -191,7 +196,7 @@ export default function AgentChat({ onActivityUpdate }: AgentChatProps) {
         setMessages(prev => [...prev, collaborationMessage])
       } else {
         // Modo individual: múltiples respuestas
-        const agentMessages: Message[] = data.responses.map((response: any, index: number) => {
+        const agentMessages: Message[] = processedData.responses.map((response: any, index: number) => {
           // Usar formatted_content si está disponible, luego response como fallback
           let content = response.formatted_content || response.response
           if (typeof content !== 'string') {

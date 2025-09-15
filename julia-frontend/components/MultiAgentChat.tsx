@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import AgentResponseRenderer from './AgentResponseRenderer';
+import { useMathProcessor } from '@/hooks/useMathProcessor';
 
 interface MultiAgentResponse {
   success?: boolean;
@@ -23,6 +24,7 @@ const MultiAgentChat: React.FC = () => {
   const [responses, setResponses] = useState<MultiAgentResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { processAgentResponse } = useMathProcessor();
 
   const handleSend = async () => {
     if (!message.trim()) return;
@@ -48,7 +50,10 @@ const MultiAgentChat: React.FC = () => {
       
       console.log('✅ Respuesta multi-agente recibida:', data);
       
-      setResponses(prev => [...prev, data]);
+      // Procesar respuestas para mejorar el rendering matemático
+      const processedData = processAgentResponse(data);
+      
+      setResponses(prev => [...prev, processedData]);
       setMessage('');
       
     } catch (err) {
