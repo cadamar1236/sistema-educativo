@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { agentsApi } from '@/lib/apiConfig'
 import { 
   Card, 
   CardBody, 
@@ -171,7 +172,7 @@ Todos los **agentes educativos** están conectados y preparados para colaborar e
 
   const fetchAgentsStatus = async () => {
     try {
-      const response = await fetch('/api/agents/status')
+      const response = await agentsApi.status()
       const data = await response.json()
       setAgentsStatus(data.agents || [])
     } catch (error) {
@@ -194,23 +195,17 @@ Todos los **agentes educativos** están conectados y preparados para colaborar e
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/agents/unified-chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: inputMessage,
-          selected_agents: activeAgents,
-          chat_mode: chatMode,
-          context: {
-            student_id: studentId,
-            user_email: user?.email,
-            user_id: user?.id,
-            timestamp: new Date().toISOString(),
-            multiagent_mode: true
-          }
-        })
+      const response = await agentsApi.chat({
+        message: inputMessage,
+        selected_agents: activeAgents,
+        chat_mode: chatMode,
+        context: {
+          student_id: studentId,
+          user_email: user?.email,
+          user_id: user?.id,
+          timestamp: new Date().toISOString(),
+          multiagent_mode: true
+        }
       })
 
       const data = await response.json()
