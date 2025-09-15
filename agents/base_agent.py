@@ -220,7 +220,6 @@ class BaseEducationalAgent(ABC):
                 model=self.model,
                 tools=all_tools,
                 instructions="\n".join(instructions) if instructions else None,
-                show_tool_calls=True,
                 markdown=True
             )
         except Exception as e:

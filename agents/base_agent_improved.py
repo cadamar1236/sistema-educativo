@@ -209,7 +209,6 @@ class BaseEducationalAgent(ABC):
                 model=self.model,
                 tools=all_tools,
                 instructions="\n".join(instructions) if instructions else None,
-                show_tool_calls=True,
                 markdown=True,
                 debug_mode=settings.debug_mode
             )
