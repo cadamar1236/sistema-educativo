@@ -101,7 +101,7 @@ interface AgentChatProps {
 
 export default function AgentChat({ onActivityUpdate }: AgentChatProps) {
   const { user } = useAuth() as any
-  const studentId = user?.id
+  const studentId = user?.email || user?.id  // Preferir email sobre ID
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -170,6 +170,8 @@ export default function AgentChat({ onActivityUpdate }: AgentChatProps) {
           chat_mode: chatMode,
           context: {
             student_id: studentId,
+            user_email: user?.email,
+            user_id: user?.id,
             timestamp: new Date().toISOString()
           }
         })

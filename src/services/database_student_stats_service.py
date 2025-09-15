@@ -47,9 +47,51 @@ class DatabaseStudentStatsService:
             print(f"❌ Error inicializando tablas: {e}")
     
     def get_or_create_student_stats(self, student_id: str, email: str = None) -> StudentStats:
-        """Obtener o crear estadísticas del estudiante"""
+        """Obtener o crear estadísticas del estudiante
+        
+        Busca por email real y formato normalizado para compatibilidad
+        """
         with get_session() as session:
+            # Primero buscar con el ID directo
             stats = session.query(StudentStats).filter(StudentStats.id == student_id).first()
+            
+            # Si no se encuentra y es un email, buscar con formato normalizado
+            if not stats and "@" in student_id:
+                normalized_id = student_id.replace("@", "_at_").replace(".", "_dot_")
+                stats = session.query(StudentStats).filter(StudentStats.id == normalized_id).first()
+                print(f"🔄 Buscando con formato normalizado: {normalized_id}")
+                
+                if stats:
+                    # Migrar el registro al nuevo formato
+                    print(f"🔄 Migrando estadísticas de {normalized_id} a {student_id}")
+                    old_stats = stats
+                    
+                    # Crear nuevo registro con email real
+                    stats = StudentStats(
+                        id=student_id,
+                        email=student_id,
+                        total_points=old_stats.total_points,
+                        level=old_stats.level,
+                        progress_percentage=old_stats.progress_percentage,
+                        lessons_completed=old_stats.lessons_completed,
+                        exercises_done=old_stats.exercises_done,
+                        total_time_spent=old_stats.total_time_spent,
+                        current_streak=old_stats.current_streak,
+                        longest_streak=old_stats.longest_streak,
+                        total_achievements=old_stats.total_achievements
+                    )
+                    session.add(stats)
+                    
+                    # Migrar actividades asociadas
+                    activities = session.query(StudentActivity).filter(StudentActivity.student_id == normalized_id).all()
+                    for activity in activities:
+                        activity.student_id = student_id
+                    
+                    # Eliminar registro normalizado
+                    session.delete(old_stats)
+                    session.commit()
+                    session.refresh(stats)
+                    print(f"✅ Migración completada para {student_id}")
             
             if not stats:
                 # Crear nuevas estadísticas
@@ -135,11 +177,13 @@ class DatabaseStudentStatsService:
                 # Obtener estadísticas básicas
                 stats = self.get_or_create_student_stats(student_id)
                 
-                # Obtener actividades de hoy
+                # Obtener actividades de hoy (buscar en ambos formatos)
                 today = datetime.now().strftime("%Y-%m-%d")
+                normalized_id = student_id.replace("@", "_at_").replace(".", "_dot_") if "@" in student_id else None
+                
                 today_activities = session.query(StudentActivity).filter(
                     and_(
-                        StudentActivity.student_id == student_id,
+                        StudentActivity.student_id.in_([student_id] + ([normalized_id] if normalized_id else [])),
                         StudentActivity.date == today
                     )
                 ).all()
@@ -149,28 +193,28 @@ class DatabaseStudentStatsService:
                 today_exercises = len([a for a in today_activities if a.activity_type == "agent_interaction"])
                 today_time = sum([a.duration_seconds or 0 for a in today_activities]) / 60
                 
-                # Obtener actividades recientes (últimos 7 días)
+                # Obtener actividades recientes (últimos 7 días, buscar en ambos formatos)
                 week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
                 recent_activities = session.query(StudentActivity).filter(
                     and_(
-                        StudentActivity.student_id == student_id,
+                        StudentActivity.student_id.in_([student_id] + ([normalized_id] if normalized_id else [])),
                         StudentActivity.date >= week_ago
                     )
                 ).order_by(desc(StudentActivity.created_at)).limit(10).all()
                 
-                # Obtener logros recientes
+                # Obtener logros recientes (buscar en ambos formatos)
                 recent_achievements = session.query(StudentAchievement).filter(
-                    StudentAchievement.student_id == student_id
+                    StudentAchievement.student_id.in_([student_id] + ([normalized_id] if normalized_id else []))
                 ).order_by(desc(StudentAchievement.earned_at)).limit(5).all()
                 
-                # Obtener progreso por materia
+                # Obtener progreso por materia (buscar en ambos formatos)
                 subject_progress = session.query(StudentSubjectProgress).filter(
-                    StudentSubjectProgress.student_id == student_id
+                    StudentSubjectProgress.student_id.in_([student_id] + ([normalized_id] if normalized_id else []))
                 ).all()
                 
-                # Obtener insignias
+                # Obtener insignias (buscar en ambos formatos)
                 badges = session.query(StudentBadge).filter(
-                    StudentBadge.student_id == student_id
+                    StudentBadge.student_id.in_([student_id] + ([normalized_id] if normalized_id else []))
                 ).all()
                 
                 # Construir respuesta
