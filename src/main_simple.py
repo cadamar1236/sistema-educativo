@@ -991,17 +991,6 @@ async def health_check_full():
 
 # === ENDPOINTS DE AGENTES ===
 
-@app.get("/api/agents/status")
-async def agents_status():
-    return {
-        "agents_available": AGENTS_AVAILABLE,
-        "init_error": AGENTS_INIT_ERROR,
-        "groq_api_key_present": bool(getattr(settings, 'groq_api_key', None)),
-        "model": getattr(settings, 'groq_model', None),
-        "required_env": ["GROQ_API_KEY"],
-        "recommendation": None if AGENTS_AVAILABLE else "Define GROQ_API_KEY en .env y reinicia el servidor"
-    }
-
 @app.get("/api/agents/test")
 async def test_agents_endpoint():
     """Endpoint de prueba para verificar agentes"""
