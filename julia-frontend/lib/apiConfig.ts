@@ -2,8 +2,13 @@
  * Configuración de la API para el frontend
  */
 
+// Detectar si estamos en desarrollo o producción
+const isDevelopment = process.env.NODE_ENV === 'development' || typeof window !== 'undefined' && window.location.hostname === 'localhost'
+
 // URL base del backend
-export const API_BASE_URL = 'http://127.0.0.1:8000'
+export const API_BASE_URL = isDevelopment 
+  ? 'http://127.0.0.1:8000' 
+  : 'https://educational-api.kindbeach-3a240fb9.eastus.azurecontainerapps.io'
 
 /**
  * Función helper para hacer llamadas a la API
