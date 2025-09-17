@@ -46,16 +46,24 @@ def patch_groq_client():
 
 def capture_agent_response(agent, message: str, max_attempts: int = 3) -> str:
     """Función mejorada para capturar respuestas de agentes Agno"""
+    print(f"🏃‍♂️ capture_agent_response called with message: {message[:100]}...")
+    
     for attempt in range(max_attempts):
         try:
+            print(f"🏃‍♂️ Attempt {attempt + 1}/{max_attempts}")
+            
             stdout_buffer = io.StringIO()
             with contextlib.redirect_stdout(stdout_buffer):
                 result = agent.print_response(message, stream=False)
             
             captured_stdout = stdout_buffer.getvalue().strip()
+            print(f"🏃‍♂️ Result type: {type(result)}, length: {len(str(result))}")
+            print(f"🏃‍♂️ Stdout length: {len(captured_stdout)}")
             
             if result and str(result).strip() and str(result) != "None":
-                return str(result).strip()
+                final_result = str(result).strip()
+                print(f"🏃‍♂️ Returning result: {len(final_result)} chars")
+                return final_result
             
             if captured_stdout:
                 lines = captured_stdout.split('\n')
@@ -73,13 +81,17 @@ def capture_agent_response(agent, message: str, max_attempts: int = 3) -> str:
                         content_lines.append(line)
                 
                 if content_lines:
-                    return '\n'.join(content_lines)
+                    final_result = '\n'.join(content_lines)
+                    print(f"🏃‍♂️ Returning stdout: {len(final_result)} chars")
+                    return final_result
                     
         except Exception as e:
+            print(f"🏃‍♂️ Exception in attempt {attempt + 1}: {e}")
             if attempt == max_attempts - 1:
                 return f"Error al obtener respuesta: {str(e)}"
             continue
     
+    print(f"🏃‍♂️ Failed all attempts, returning fallback")
     return "No se pudo obtener una respuesta válida del agente"
 
 
@@ -155,7 +167,11 @@ class StudentCoachAgent:
     
     def get_response(self, message: str) -> str:
         """Obtiene respuesta usando el sistema mejorado de captura"""
-        return capture_agent_response(self.agent, message)
+        print(f"🏃‍♂️ Coach get_response called with message: {message[:100]}...")
+        result = capture_agent_response(self.agent, message)
+        print(f"🏃‍♂️ Coach get_response result length: {len(str(result))}")
+        print(f"🏃‍♂️ Coach get_response result preview: {str(result)[:200]}...")
+        return result
 
     def _strip_prompt_context(self, raw: str) -> str:
         """Elimina el bloque de contexto/instrucciones si el modelo lo devolvió junto a la respuesta.

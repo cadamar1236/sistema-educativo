@@ -35,10 +35,16 @@ def extract_user_from_request(request) -> Optional[Dict[str, Any]]:
     try:
         # Buscar el token en el header Authorization
         auth_header = request.headers.get("authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
+        if not auth_header:
+            print("🔍 Debug auth: No authorization header found")
+            return None
+            
+        if not auth_header.startswith("Bearer "):
+            print(f"🔍 Debug auth: Invalid auth header format: {auth_header[:50]}...")
             return None
             
         token = auth_header.split(" ")[1]
+        print(f"🔍 Debug auth: Token found, length: {len(token)}")
         
         # Importar el servicio de autenticación
         try:
@@ -47,14 +53,16 @@ def extract_user_from_request(request) -> Optional[Dict[str, Any]]:
             try:
                 from auth.google_auth import GoogleAuthService
             except ImportError:
+                print("🔍 Debug auth: Could not import GoogleAuthService")
                 return None
         
         auth_service = GoogleAuthService()
         payload = auth_service.verify_jwt_token(token)
+        print(f"🔍 Debug auth: Token verified, payload: {payload}")
         return payload
         
     except Exception as e:
-        # Si no se puede extraer el usuario, devolver None silenciosamente
+        print(f"🔍 Debug auth: Exception in extract_user_from_request: {e}")
         return None
 
 def normalize_student_id(identifier: str) -> str:
@@ -1249,6 +1257,8 @@ async def get_student_guidance(request_data: dict):
     - {"studentId": "123", ...}
     """
     try:
+        print(f"🏃‍♂️ Coach endpoint called with data: {request_data}")
+        
         # Normalizar datos del estudiante
         student_data = request_data.get("studentData") or request_data.get("student_data") or {}
         student_id = request_data.get("student_id") or request_data.get("studentId") or student_data.get("id")
@@ -1265,20 +1275,33 @@ async def get_student_guidance(request_data: dict):
             or context.get("message")
             or "¿Cómo puedo mejorar mi rendimiento académico?"
         )
+        
+        print(f"🏃‍♂️ Coach question: {question}")
+        print(f"🏃‍♂️ Student data: {student_data}")
 
         # Usar coach real si está registrado
         if "student_coach" in agent_manager.agents:
+            print(f"🏃‍♂️ Using real coach agent")
             coach = agent_manager.agents["student_coach"]
             result = await coach.coach_student(question, student_data)
+            print(f"🏃‍♂️ Raw coach result type: {type(result)}, length: {len(str(result))}")
+            print(f"🏃‍♂️ Raw coach result preview: {str(result)[:200]}...")
+            
             guidance = agent_manager._extract_clean_response(result)
+            print(f"🏃‍♂️ Extracted guidance length: {len(str(guidance))}")
+            print(f"🏃‍♂️ Extracted guidance preview: {str(guidance)[:200]}...")
+            
             agent_used = "student_coach"
         else:
+            print(f"🏃‍♂️ Using tutor fallback")
             fallback_context = {"student_data": student_data, "guidance_mode": True, **context}
             guidance = await agent_manager.get_agent_response("tutor", question, fallback_context)
             agent_used = "tutor"
 
         # Asegurar un string limpio
         guidance_str = str(guidance)
+        
+        print(f"🏃‍♂️ Final guidance length: {len(guidance_str)}")
 
         return {
             "success": True,
