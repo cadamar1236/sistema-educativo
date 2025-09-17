@@ -289,29 +289,15 @@ class StudentCoachAgent:
             # Construir prompt directo y conciso
             student_name = student_context.get('name', 'estudiante') if student_context else 'estudiante'
             
-            # Prompt mejorado que evita que el modelo devuelva el prompt
-            coaching_prompt = f"""Eres un coach estudiantil experto y empático. Un estudiante llamado {student_name} te pregunta:
+            # Prompt súper simplificado para evitar confusión
+            coaching_prompt = f"""Pregunta del estudiante {student_name}: "{message}"
 
-"{message}"
-
-Responde SOLO con tu consejo de coaching. Incluye:
-- Saludo empático y motivador
-- Consejos específicos y accionables organizados claramente
-- Estrategias de estudio relevantes
-- Apoyo emocional cuando sea necesario
-
-Usa un formato visual atractivo con:
-- Títulos con emojis (##, ###)
-- Listas numeradas o con viñetas
-- **Texto en negrita** para puntos importantes
-- Párrafos cortos y bien separados
-
-Responde directamente como coach, NO repitas el prompt."""
+Responde como un coach estudiantil empático. Usa formato markdown con títulos ## y listas."""
             
             # Obtener respuesta del coach
             response = self.get_response(coaching_prompt)
             
-            # Limpieza básica de la respuesta
+            # Limpieza agresiva de la respuesta para eliminar prompts
             if isinstance(response, str):
                 # Eliminar códigos ANSI y caracteres especiales
                 import re
@@ -321,36 +307,87 @@ Responde directamente como coach, NO repitas el prompt."""
                 for ch in ['┏', '┗', '┃', '━', '┛']:
                     response = response.replace(ch, '')
                 
-                # Filtrar el prompt si aparece en la respuesta
+                # FILTRO SÚPER AGRESIVO para eliminar prompts
                 lines = response.split('\n')
-                filtered_lines = []
-                skip_prompt = False
+                cleaned_lines = []
+                found_real_content = False
                 
-                for line in lines:
-                    line_clean = line.strip().lower()
-                    # Detectar si es parte del prompt
-                    if any(prompt_indicator in line_clean for prompt_indicator in [
-                        'como coach estudiantil',
-                        'proporciona:',
+                for i, line in enumerate(lines):
+                    line_stripped = line.strip()
+                    line_lower = line_stripped.lower()
+                    
+                    # Saltar líneas que claramente son parte del prompt
+                    skip_patterns = [
+                        'eres un coach estudiantil',
+                        'un estudiante llamado',
+                        'te pregunta:',
                         'responde solo con',
                         'incluye:',
                         'usa un formato',
-                        'responde directamente como coach'
-                    ]):
-                        skip_prompt = True
+                        'responde directamente',
+                        'saludo empático',
+                        'consejos específicos',
+                        'estrategias de estudio',
+                        'apoyo emocional',
+                        'títulos con emojis',
+                        'listas numeradas',
+                        'texto en negrita',
+                        'párrafos cortos',
+                        'no repitas el prompt'
+                    ]
+                    
+                    # Si la línea contiene patrones del prompt, saltarla
+                    if any(pattern in line_lower for pattern in skip_patterns):
                         continue
                     
-                    # Si encontramos contenido real del coach, empezar a incluir
-                    if skip_prompt and (line_clean.startswith('¡') or 
-                                      line_clean.startswith('hola') or
-                                      line_clean.startswith('##') or
-                                      line_clean.startswith('me alegra')):
-                        skip_prompt = False
+                    # Detectar cuando empieza el contenido real del coach
+                    real_content_indicators = [
+                        line_lower.startswith('¡'),
+                        line_lower.startswith('hola'),
+                        line_lower.startswith('me alegra'),
+                        line_lower.startswith('##'),
+                        line_lower.startswith('bienvenid'),
+                        line_lower.startswith('gracias'),
+                        'fortalezas académicas' in line_lower,
+                        'desafío a mejorar' in line_lower
+                    ]
                     
-                    if not skip_prompt:
-                        filtered_lines.append(line)
+                    if any(real_content_indicators) and not found_real_content:
+                        found_real_content = True
+                    
+                    # Solo incluir líneas después de encontrar contenido real
+                    if found_real_content:
+                        cleaned_lines.append(line)
                 
-                response = '\n'.join(filtered_lines).strip()
+                # Si no encontramos contenido real, buscar desde el final
+                if not cleaned_lines:
+                    # Buscar desde atrás líneas que parezcan respuesta real
+                    for line in reversed(lines):
+                        if (len(line.strip()) > 10 and 
+                            not any(p in line.lower() for p in ['eres un coach', 'responde solo', 'incluye:', 'usa un formato'])):
+                            # Encontrar el índice y tomar desde ahí
+                            start_idx = lines.index(line)
+                            cleaned_lines = lines[start_idx:]
+                            break
+                
+                if cleaned_lines:
+                    response = '\n'.join(cleaned_lines).strip()
+                else:
+                    # Si todo falló, buscar cualquier línea que tenga contenido sustancial
+                    substantial_lines = [line for line in lines if len(line.strip()) > 20]
+                    if substantial_lines:
+                        response = '\n'.join(substantial_lines).strip()
+                
+                # Última limpieza: eliminar fragmentos residuales del prompt
+                prompt_fragments = [
+                    'Eres un coach estudiantil experto y empático.',
+                    'Responde SOLO con tu consejo de coaching.',
+                    'Usa un formato visual atractivo con:',
+                    'Responde directamente como coach, NO repitas el prompt.'
+                ]
+                
+                for fragment in prompt_fragments:
+                    response = response.replace(fragment, '').strip()
             
             # Registrar la sesión
             session_record = {

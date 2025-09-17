@@ -4,6 +4,10 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Card, CardBody, CardHeader, Button, Input, Avatar, Spinner, Chip, Textarea } from '@nextui-org/react'
 import { Send, Brain, Sparkles, MessageCircle, Lightbulb, Target } from 'lucide-react'
 import { useJuliaAgents } from '@/lib/juliaAgentService'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 
 interface AICoachProps {
   studentData: any
@@ -220,7 +224,87 @@ export default function AICoach({ studentData }: AICoachProps) {
               ? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200' 
               : 'bg-blue-500 text-white'
           }`}>
-            <p className="text-sm">{message.content}</p>
+            {/* Renderizar contenido con markdown para respuestas del coach */}
+            {isCoach ? (
+              <div className="markdown-content">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    // Headers con estilos bonitos
+                    h1: ({children}) => (
+                      <h1 className="text-lg font-bold mb-3 text-blue-700 border-b border-blue-200 pb-1">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({children}) => (
+                      <h2 className="text-base font-bold mb-2 text-blue-600">
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({children}) => (
+                      <h3 className="text-sm font-semibold mb-2 text-blue-500">
+                        {children}
+                      </h3>
+                    ),
+                    h4: ({children}) => (
+                      <h4 className="text-xs font-semibold mb-1 text-blue-400">
+                        {children}
+                      </h4>
+                    ),
+                    
+                    // Párrafos con espaciado
+                    p: ({children}) => (
+                      <p className="mb-2 leading-relaxed text-sm">
+                        {children}
+                      </p>
+                    ),
+                    
+                    // Listas con mejor formato
+                    ul: ({children}) => (
+                      <ul className="list-disc list-inside mb-2 space-y-1">
+                        {children}
+                      </ul>
+                    ),
+                    ol: ({children}) => (
+                      <ol className="list-decimal list-inside mb-2 space-y-1">
+                        {children}
+                      </ol>
+                    ),
+                    li: ({children}) => (
+                      <li className="text-sm leading-relaxed">
+                        {children}
+                      </li>
+                    ),
+                    
+                    // Texto en negrita
+                    strong: ({children}) => (
+                      <strong className="font-semibold text-blue-700">
+                        {children}
+                      </strong>
+                    ),
+                    
+                    // Código inline
+                    code: ({children}) => (
+                      <code className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-xs font-mono">
+                        {children}
+                      </code>
+                    ),
+                    
+                    // Blockquotes
+                    blockquote: ({children}) => (
+                      <blockquote className="border-l-4 border-blue-400 pl-3 py-1 bg-blue-50 dark:bg-blue-900/20 mb-2">
+                        {children}
+                      </blockquote>
+                    )
+                  }}
+                >
+                  {message.content}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <p className="text-sm">{message.content}</p>
+            )}
             
             {/* Mostrar recomendaciones si las hay */}
             {message.type === 'recommendation' && message.metadata?.recommendations && (
