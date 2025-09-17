@@ -99,6 +99,7 @@ try:
     from agents.student_coach.agent import StudentCoachAgent
     from agents.educational_rag.agent import EducationalRAGAgent
     from fixed_base_agent import EnhancedEducationalAgent
+    from src.services.coaching_database_service import get_coaching_db_service
     # Validar API Key antes de marcar disponibles
     if not getattr(settings, 'groq_api_key', None):
         raise ValueError("GROQ_API_KEY no encontrada en configuración (.env)")
@@ -1291,6 +1292,32 @@ async def get_student_guidance(request_data: dict):
             print(f"🏃‍♂️ Extracted guidance length: {len(str(guidance))}")
             print(f"🏃‍♂️ Extracted guidance preview: {str(guidance)[:200]}...")
             
+            # Guardar sesión en la base de datos
+            try:
+                coaching_db = await get_coaching_db_service()
+                session_data = {
+                    'student_id': student_id or student_data.get("id", "unknown"),
+                    'student_name': student_data.get("name", "Unknown"),
+                    'student_message': question,
+                    'coach_response': str(guidance),
+                    'emotional_state': 'neutral',  # Por ahora neutral, después podemos añadir análisis emocional
+                    'metadata': {
+                        'agent_used': 'student_coach',
+                        'model_used': settings.groq_model,
+                        'response_length': len(str(guidance)),
+                        'has_markdown': "##" in str(guidance) or "**" in str(guidance),
+                        'context': context
+                    },
+                    'intervention_needed': False  # Por ahora false, después podemos añadir lógica de intervención
+                }
+                
+                session_id = await coaching_db.save_coaching_session(session_data)
+                print(f"💾 Sesión de coaching guardada en DB: {session_id}")
+                
+            except Exception as db_error:
+                print(f"⚠️ Error guardando sesión en DB (continuando): {db_error}")
+                # No fallar el endpoint si la base de datos falla
+            
             agent_used = "student_coach"
         else:
             print(f"🏃‍♂️ Using tutor fallback")
@@ -1350,6 +1377,65 @@ async def log_student_interaction(request_data: dict):
         }
         
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/students/{student_id}/coaching-history")
+async def get_student_coaching_history(student_id: str, limit: int = 50):
+    """Obtener historial de coaching de un estudiante"""
+    try:
+        coaching_db = await get_coaching_db_service()
+        history = await coaching_db.get_student_coaching_history(student_id, limit)
+        
+        return {
+            "success": True,
+            "student_id": student_id,
+            "sessions": history,
+            "total_sessions": len(history)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error obteniendo historial de coaching: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/students/{student_id}/stats")
+async def get_student_stats(student_id: str):
+    """Obtener estadísticas de un estudiante"""
+    try:
+        coaching_db = await get_coaching_db_service()
+        stats = await coaching_db.get_student_stats(student_id)
+        
+        if not stats:
+            return {
+                "success": True,
+                "student_id": student_id,
+                "stats": None,
+                "message": "No se encontraron estadísticas para este estudiante"
+            }
+        
+        return {
+            "success": True,
+            "student_id": student_id,
+            "stats": stats
+        }
+        
+    except Exception as e:
+        print(f"❌ Error obteniendo estadísticas del estudiante: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/coaching/analytics")
+async def get_coaching_analytics():
+    """Obtener analytics generales del sistema de coaching"""
+    try:
+        coaching_db = await get_coaching_db_service()
+        analytics = await coaching_db.get_coaching_analytics()
+        
+        return {
+            "success": True,
+            "analytics": analytics
+        }
+        
+    except Exception as e:
+        print(f"❌ Error obteniendo analytics de coaching: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Alias para compatibilidad con frontend

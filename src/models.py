@@ -180,3 +180,29 @@ class UnifiedChatRequest(BaseModel):
     selected_agents: List[str]
     chat_mode: str = "individual"
     context: Optional[Dict[str, Any]] = None
+
+
+class CoachingSession(BaseModel):
+    """Modelo para sesiones de coaching"""
+    id: str
+    student_id: str
+    student_name: str
+    student_message: str
+    coach_response: str
+    emotional_state: Optional[str] = "neutral"
+    session_metadata: Optional[Dict[str, Any]] = None
+    intervention_needed: bool = False
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class StudentStats(BaseModel):
+    """Estadísticas del estudiante"""
+    student_id: str
+    student_name: str
+    total_sessions: int = 0
+    coaching_sessions: int = 0
+    last_activity: Optional[datetime] = None
+    emotional_trend: List[str] = []
+    intervention_alerts: int = 0
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
