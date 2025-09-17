@@ -60,39 +60,51 @@ def capture_agent_response(agent, message: str, max_attempts: int = 3) -> str:
             print(f"🏃‍♂️ Result type: {type(result)}, length: {len(str(result))}")
             print(f"🏃‍♂️ Stdout length: {len(captured_stdout)}")
             
-            if result and str(result).strip() and str(result) != "None":
-                final_result = str(result).strip()
-                print(f"🏃‍♂️ Returning result: {len(final_result)} chars")
-                return final_result
+            # PRIORIZAR STDOUT sobre result si result es None
+            content_to_process = None
             
-            if captured_stdout:
-                lines = captured_stdout.split('\n')
+            if result and str(result).strip() and str(result) != "None":
+                content_to_process = str(result).strip()
+                print(f"🏃‍♂️ Using result content: {len(content_to_process)} chars")
+            elif captured_stdout:
+                content_to_process = captured_stdout
+                print(f"🏃‍♂️ Using stdout content: {len(content_to_process)} chars")
+            
+            if content_to_process:
+                # Limpiar el contenido capturado
+                lines = content_to_process.split('\n')
                 content_lines = []
+                
                 for line in lines:
                     line = line.strip()
+                    # Filtrar líneas de debug y decoración
                     if (line and 
                         not line.startswith('┏') and 
                         not line.startswith('┃') and 
                         not line.startswith('┗') and
                         not line.startswith('━') and
+                        not line.startswith('🏃‍♂️') and  # Filtrar nuestros logs
                         'Message' not in line and
                         'Response' not in line and
+                        'INFO:' not in line and
+                        'HTTP Request:' not in line and
                         len(line) > 3):
                         content_lines.append(line)
                 
                 if content_lines:
                     final_result = '\n'.join(content_lines)
-                    print(f"🏃‍♂️ Returning stdout: {len(final_result)} chars")
+                    print(f"🏃‍♂️ Returning cleaned content: {len(final_result)} chars")
+                    print(f"🏃‍♂️ Preview: {final_result[:200]}...")
                     return final_result
                     
         except Exception as e:
             print(f"🏃‍♂️ Exception in attempt {attempt + 1}: {e}")
             if attempt == max_attempts - 1:
-                return f"Error al obtener respuesta: {str(e)}"
+                return f"Error al obtener respuesta del coach: {str(e)}"
             continue
     
     print(f"🏃‍♂️ Failed all attempts, returning fallback")
-    return "No se pudo obtener una respuesta válida del agente"
+    return "Como tu coach personal, estoy aquí para apoyarte en tu crecimiento académico. ¿Podrías contarme más específicamente en qué área necesitas orientación?"
 
 
 class StudentCoachAgent:
@@ -166,12 +178,31 @@ class StudentCoachAgent:
         """
     
     def get_response(self, message: str) -> str:
-        """Obtiene respuesta usando el sistema mejorado de captura"""
+        """Obtiene respuesta usando múltiples métodos"""
         print(f"🏃‍♂️ Coach get_response called with message: {message[:100]}...")
+        
+        # Método 1: Captura estándar
         result = capture_agent_response(self.agent, message)
-        print(f"🏃‍♂️ Coach get_response result length: {len(str(result))}")
-        print(f"🏃‍♂️ Coach get_response result preview: {str(result)[:200]}...")
-        return result
+        print(f"🏃‍♂️ Coach capture result length: {len(str(result))}")
+        
+        # Si el resultado es demasiado corto, intentar método alternativo
+        if len(str(result)) < 100:
+            print(f"🏃‍♂️ Result too short, trying alternative method...")
+            try:
+                # Método 2: Usar run() directamente
+                run_result = self.agent.run(message, stream=False)
+                if run_result and hasattr(run_result, 'content'):
+                    alternative_result = str(run_result.content)
+                    print(f"🏃‍♂️ Alternative method result length: {len(alternative_result)}")
+                    if len(alternative_result) > len(str(result)):
+                        result = alternative_result
+                        print(f"🏃‍♂️ Using alternative result")
+            except Exception as e:
+                print(f"🏃‍♂️ Alternative method failed: {e}")
+        
+        print(f"🏃‍♂️ Final coach result length: {len(str(result))}")
+        print(f"🏃‍♂️ Final coach result preview: {str(result)[:200]}...")
+        return str(result)
 
     def _strip_prompt_context(self, raw: str) -> str:
         """Elimina el bloque de contexto/instrucciones si el modelo lo devolvió junto a la respuesta.
