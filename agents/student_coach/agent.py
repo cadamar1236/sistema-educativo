@@ -45,7 +45,7 @@ def patch_groq_client():
         return False
 
 def capture_agent_response(agent, message: str, max_attempts: int = 3) -> str:
-    """Función mejorada para capturar respuestas de agentes Agno"""
+    """Función mejorada para capturar respuestas de agentes Agno - versión SÚPER agresiva"""
     print(f"🏃‍♂️ capture_agent_response called with message: {message[:100]}...")
     
     for attempt in range(max_attempts):
@@ -60,42 +60,63 @@ def capture_agent_response(agent, message: str, max_attempts: int = 3) -> str:
             print(f"🏃‍♂️ Result type: {type(result)}, length: {len(str(result))}")
             print(f"🏃‍♂️ Stdout length: {len(captured_stdout)}")
             
-            # PRIORIZAR STDOUT sobre result si result es None
-            content_to_process = None
-            
-            if result and str(result).strip() and str(result) != "None":
-                content_to_process = str(result).strip()
-                print(f"🏃‍♂️ Using result content: {len(content_to_process)} chars")
-            elif captured_stdout:
-                content_to_process = captured_stdout
-                print(f"🏃‍♂️ Using stdout content: {len(content_to_process)} chars")
-            
-            if content_to_process:
-                # Limpiar el contenido capturado
-                lines = content_to_process.split('\n')
-                content_lines = []
+            # ESTRATEGIA SÚPER AGRESIVA: Si hay contenido en stdout, usarlo con limpieza mínima
+            if captured_stdout and len(captured_stdout) > 200:
+                print(f"🏃‍♂️ Using stdout content with minimal cleaning")
+                
+                # Limpieza mínima: solo quitar líneas obviamente técnicas
+                lines = captured_stdout.split('\n')
+                cleaned_lines = []
                 
                 for line in lines:
-                    line = line.strip()
-                    # Filtrar líneas de debug y decoración
-                    if (line and 
+                    # Saltar solo líneas técnicas obvias
+                    if (line.strip() and 
                         not line.startswith('┏') and 
-                        not line.startswith('┃') and 
-                        not line.startswith('┗') and
-                        not line.startswith('━') and
-                        not line.startswith('🏃‍♂️') and  # Filtrar nuestros logs
-                        'Message' not in line and
-                        'Response' not in line and
-                        'INFO:' not in line and
+                        not line.startswith('┗') and 
+                        not line.startswith('━━━') and
                         'HTTP Request:' not in line and
-                        len(line) > 3):
-                        content_lines.append(line)
+                        'telemetry/runs' not in line and
+                        'INFO:httpx:' not in line and
+                        not line.strip().startswith('🏃‍♂️')):
+                        cleaned_lines.append(line)
                 
-                if content_lines:
-                    final_result = '\n'.join(content_lines)
-                    print(f"🏃‍♂️ Returning cleaned content: {len(final_result)} chars")
-                    print(f"🏃‍♂️ Preview: {final_result[:200]}...")
-                    return final_result
+                # Unir todo el contenido
+                final_content = '\n'.join(cleaned_lines).strip()
+                
+                # Si encontramos contenido substantial, devolverlo
+                if len(final_content) > 100:
+                    print(f"🏃‍♂️ Found substantial content: {len(final_content)} chars")
+                    print(f"🏃‍♂️ Raw preview: {final_content[:300]}...")
+                    
+                    # Buscar la primera línea que parece contenido real
+                    content_lines = final_content.split('\n')
+                    real_content_start = -1
+                    
+                    for i, line in enumerate(content_lines):
+                        line_clean = line.strip()
+                        if (len(line_clean) > 10 and
+                            not line_clean.startswith('Message') and
+                            not line_clean.startswith('Response') and
+                            not line_clean.startswith('RunOutput') and
+                            not '┃' in line_clean):
+                            real_content_start = i
+                            break
+                    
+                    if real_content_start >= 0:
+                        real_content = '\n'.join(content_lines[real_content_start:]).strip()
+                        if len(real_content) > 50:
+                            print(f"🏃‍♂️ Extracted real content: {len(real_content)} chars")
+                            return real_content
+                    
+                    # Si no encontramos inicio claro, devolver todo
+                    print(f"🏃‍♂️ No clear start found, returning all cleaned content")
+                    return final_content
+            
+            # Si result tiene contenido válido, usarlo
+            if result and str(result).strip() and str(result) != "None":
+                final_result = str(result).strip()
+                print(f"🏃‍♂️ Using result: {len(final_result)} chars")
+                return final_result
                     
         except Exception as e:
             print(f"🏃‍♂️ Exception in attempt {attempt + 1}: {e}")
