@@ -180,6 +180,14 @@ class StudentCoachAgent:
         - Ofrecer estrategias de estudio efectivas
         - Ser un mentor confiable y comprensivo
 
+        FORMATO DE RESPUESTA:
+        - Responde DIRECTAMENTE como coach, no repitas prompts
+        - Usa formato markdown para mejor presentación
+        - Incluye emojis en títulos (## 🎯 Título)
+        - Organiza en secciones claras con espacios
+        - Usa listas numeradas o viñetas
+        - **Resalta puntos importantes en negrita**
+
         ESTILO DE COMUNICACIÓN:
         - Empático y comprensivo
         - Claro y directo
@@ -196,6 +204,7 @@ class StudentCoachAgent:
         - Ofrece pasos concretos
         - Mantén un tono positivo
         - Adapta tu lenguaje al nivel del estudiante
+        - Responde solo con el contenido del coaching, NO incluyas el prompt
         """
     
     def get_response(self, message: str) -> str:
@@ -280,18 +289,24 @@ class StudentCoachAgent:
             # Construir prompt directo y conciso
             student_name = student_context.get('name', 'estudiante') if student_context else 'estudiante'
             
-            # Prompt simplificado pero efectivo
-            coaching_prompt = f"""Como coach estudiantil, ayuda a {student_name} con esta consulta:
+            # Prompt mejorado que evita que el modelo devuelva el prompt
+            coaching_prompt = f"""Eres un coach estudiantil experto y empático. Un estudiante llamado {student_name} te pregunta:
 
 "{message}"
 
-Proporciona:
-1. Una respuesta empática y motivadora
-2. Consejos específicos y accionables
-3. Estrategias de estudio si es relevante
-4. Apoyo emocional si es necesario
+Responde SOLO con tu consejo de coaching. Incluye:
+- Saludo empático y motivador
+- Consejos específicos y accionables organizados claramente
+- Estrategias de estudio relevantes
+- Apoyo emocional cuando sea necesario
 
-Mantén un tono positivo, profesional y alentador."""
+Usa un formato visual atractivo con:
+- Títulos con emojis (##, ###)
+- Listas numeradas o con viñetas
+- **Texto en negrita** para puntos importantes
+- Párrafos cortos y bien separados
+
+Responde directamente como coach, NO repitas el prompt."""
             
             # Obtener respuesta del coach
             response = self.get_response(coaching_prompt)
@@ -305,7 +320,37 @@ Mantén un tono positivo, profesional y alentador."""
                 # Limpiar caracteres de caja
                 for ch in ['┏', '┗', '┃', '━', '┛']:
                     response = response.replace(ch, '')
-                response = response.strip()
+                
+                # Filtrar el prompt si aparece en la respuesta
+                lines = response.split('\n')
+                filtered_lines = []
+                skip_prompt = False
+                
+                for line in lines:
+                    line_clean = line.strip().lower()
+                    # Detectar si es parte del prompt
+                    if any(prompt_indicator in line_clean for prompt_indicator in [
+                        'como coach estudiantil',
+                        'proporciona:',
+                        'responde solo con',
+                        'incluye:',
+                        'usa un formato',
+                        'responde directamente como coach'
+                    ]):
+                        skip_prompt = True
+                        continue
+                    
+                    # Si encontramos contenido real del coach, empezar a incluir
+                    if skip_prompt and (line_clean.startswith('¡') or 
+                                      line_clean.startswith('hola') or
+                                      line_clean.startswith('##') or
+                                      line_clean.startswith('me alegra')):
+                        skip_prompt = False
+                    
+                    if not skip_prompt:
+                        filtered_lines.append(line)
+                
+                response = '\n'.join(filtered_lines).strip()
             
             # Registrar la sesión
             session_record = {
